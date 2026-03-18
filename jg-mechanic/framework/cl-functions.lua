@@ -79,7 +79,8 @@ end
 ---@param cbCancelled? function Code to run if the progress bar is cancelled
 function Framework.Client.ProgressBar(text, duration, anim, prop, cb, cbCancelled)
   if Config.ProgressBar == "auto" or Config.ProgressBar == "ox-bar" or Config.ProgressBar == "ox-circle" then
-    if (Config.ProgressBar == "ox-bar" and lib.progressBar or lib.progressCircle)({
+    local progressHandler = (Config.ProgressBar == "ox-circle") and lib.progressCircle or lib.progressBar
+    if progressHandler({
       duration = duration or 5000,
       label = text or "",
       useWhileDead = false,
@@ -109,7 +110,7 @@ function Framework.Client.ProgressBar(text, duration, anim, prop, cb, cbCancelle
       bone = prop.bone,
       coords = prop.coords,
       rotation = prop.rotation
-    }, {}, cb(), cbCancelled and cbCancelled() or false)
+    }, {}, cb, cbCancelled or function() end)
   end
 end
 
@@ -124,9 +125,9 @@ function Framework.Client.SkillCheck(cb, cbFailed)
   
   if Config.SkillCheck == "auto" or Config.SkillCheck == "ox" then
     repeat
-      success = lib.skillCheck(Config.SkillCheckDifficulty, Config.SkillCheckInputs)
+      local success = lib.skillCheck(Config.SkillCheckDifficulty, Config.SkillCheckInputs)
       if not success then
-        attempts += 1
+        attempts = attempts + 1
         if attempts == maxFails then return cbFailed() end
         Framework.Client.Notify(Locale.skillCheckFailed:format(maxFails - attempts), "error")
       end 
@@ -270,9 +271,11 @@ end
 ---@param type "cash" | "bank" | "money"
 function Framework.Client.GetBalance(type)
   if Config.Framework == "QBCore" then
-    return QBCore.Functions.GetPlayerData().money[type]
+    local playerData = QBCore.Functions.GetPlayerData()
+    return playerData.money and playerData.money[type] or 0
   elseif Config.Framework == "Qbox" then
-    return exports.qbx_core:GetPlayerData().money[type]
+    local playerData = exports.qbx_core:GetPlayerData()
+    return playerData.money and playerData.money[type] or 0
   elseif Config.Framework == "ESX" then
     if type == "cash" then type = "money" end
     
@@ -326,7 +329,7 @@ end
 
 ---@param toggle boolean
 function Framework.Client.ToggleJobDuty(toggle)
-  lib.callback.await("jg-mechanic:server:toggle-duty", false, toggle)
+  return lib.callback.await("jg-mechanic:server:toggle-duty", false, toggle)
 end
 
 -- 

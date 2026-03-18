@@ -38,24 +38,6 @@ function VRS.OpenStash(shopId)
     lib.callback.await('vrs_mechanic:server:openStash', false, shopId)
 end
 
-local function moveLift(shopId, liftIndex, direction)
-    local ok, state = VRS.SetLiftHeight(
-        shopId,
-        liftIndex,
-        ((VRS.LiftState and VRS.LiftState[VRS.GetLiftKey(shopId, liftIndex)] and VRS.LiftState[VRS.GetLiftKey(shopId, liftIndex)].height) or (Config.Lift.MinHeight or 0.0))
-            + ((direction == 'up') and (Config.Lift.StepHeight or 0.15) or -(Config.Lift.StepHeight or 0.15)),
-        true
-    )
-
-    if ok and state then
-        lib.notify({
-            title = 'Elevador',
-            description = ('Elevador ajustado para %s.'):format(VRS.GetLiftHeightLabel(state.height or 0.0)),
-            type = 'success',
-        })
-    end
-end
-
 function VRS.OpenLiftMenu(shopId, liftIndex)
     local shop = Config.Shops[shopId]
     if not shop then return end
@@ -128,57 +110,10 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         end
 
         options[#options + 1] = {
-            title = 'Subir elevador',
-            description = 'Elevar o veículo por um passo configurável.',
-            icon = 'fas fa-arrow-up',
-            onSelect = function()
-                moveLift(shopId, liftIndex, 'up')
-            end,
-        }
-
-        options[#options + 1] = {
-            title = 'Descer elevador',
-            description = 'Baixar o veículo por um passo configurável.',
-            icon = 'fas fa-arrow-down',
-            onSelect = function()
-                moveLift(shopId, liftIndex, 'down')
-            end,
-        }
-
-        options[#options + 1] = {
-            title = 'Modo manual com setas',
-            description = 'Use seta para cima/baixo para ajuste fino e ESC para sair.',
-            icon = 'fas fa-keyboard',
-            onSelect = function()
-                VRS.StartManualLiftControl(shopId, liftIndex)
-            end,
-        }
-
-        options[#options + 1] = {
-            title = 'Altura de serviço do motor',
-            description = ('Ajustar para %.2fm.'):format((Config.Lift.DefaultWorkHeights and Config.Lift.DefaultWorkHeights.engine) or 0.45),
-            icon = 'fas fa-engine',
-            onSelect = function()
-                VRS.SetLiftPreset(shopId, liftIndex, 'engine')
-            end,
-        }
-
-        options[#options + 1] = {
-            title = 'Altura de serviço inferior',
-            description = ('Ajustar para %.2fm.'):format((Config.Lift.DefaultWorkHeights and Config.Lift.DefaultWorkHeights.underbody) or 1.15),
-            icon = 'fas fa-car-burst',
-            onSelect = function()
-                VRS.SetLiftPreset(shopId, liftIndex, 'underbody')
-            end,
-        }
-
-        options[#options + 1] = {
-            title = 'Retornar à posição inicial',
-            description = 'Baixar totalmente o elevador até a base.',
-            icon = 'fas fa-rotate-left',
-            onSelect = function()
-                VRS.SetLiftPreset(shopId, liftIndex, 'reset')
-            end,
+            title = 'Painel físico do elevador',
+            description = 'Use o painel do elevador com ox_target para subir, descer ou salvar a altura.',
+            icon = 'fas fa-sliders',
+            readOnly = true,
         }
 
         options[#options + 1] = {

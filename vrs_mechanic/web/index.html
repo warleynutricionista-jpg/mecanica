@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRS Mechanic - Tablet</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="tablet" class="hidden">
+        <div class="tablet-frame">
+            <div class="tablet-header">
+                <div class="header-left">
+                    <i class="fas fa-wrench"></i>
+                    <span id="shop-name">Mecânica Central</span>
+                </div>
+                <div class="header-right">
+                    <span id="player-name"></span>
+                    <button class="btn-icon" onclick="closeTablet()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="tablet-nav">
+                <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+                    <i class="fas fa-home"></i> Painel
+                </button>
+                <button class="nav-btn" data-tab="orders" onclick="switchTab('orders')">
+                    <i class="fas fa-clipboard-list"></i> Ordens de Serviço
+                </button>
+                <button class="nav-btn" data-tab="employees" onclick="switchTab('employees')">
+                    <i class="fas fa-users"></i> Funcionários
+                </button>
+                <button class="nav-btn" data-tab="pricing" onclick="switchTab('pricing')">
+                    <i class="fas fa-tags"></i> Preços
+                </button>
+                <button class="nav-btn" data-tab="billing" onclick="switchTab('billing')">
+                    <i class="fas fa-file-invoice-dollar"></i> Cobrança
+                </button>
+                <button class="nav-btn" data-tab="logs" onclick="switchTab('logs')">
+                    <i class="fas fa-history"></i> Histórico
+                </button>
+            </div>
+
+            <div class="tablet-content">
+                <!-- DASHBOARD -->
+                <div id="tab-dashboard" class="tab-panel active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-clipboard-list"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-total-orders">0</span>
+                                <span class="stat-label">Total de OS</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-completed">0</span>
+                                <span class="stat-label">OS Concluídas</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon warning"><i class="fas fa-dollar-sign"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-revenue">R$ 0</span>
+                                <span class="stat-label">Faturamento</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon info"><i class="fas fa-users"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-employees">0</span>
+                                <span class="stat-label">Funcionários</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ORDENS DE SERVIÇO -->
+                <div id="tab-orders" class="tab-panel">
+                    <div class="tab-toolbar">
+                        <select id="order-filter" onchange="loadOrders()">
+                            <option value="">Todas</option>
+                            <option value="open">Abertas</option>
+                            <option value="progress">Em Andamento</option>
+                            <option value="waiting">Aguardando Peça</option>
+                            <option value="done">Concluídas</option>
+                            <option value="delivered">Entregues</option>
+                        </select>
+                        <button class="btn btn-refresh" onclick="loadOrders()">
+                            <i class="fas fa-sync-alt"></i> Atualizar
+                        </button>
+                    </div>
+                    <div id="orders-list" class="list-container">
+                        <p class="empty-msg">Nenhuma ordem de serviço.</p>
+                    </div>
+                </div>
+
+                <!-- FUNCIONÁRIOS -->
+                <div id="tab-employees" class="tab-panel">
+                    <div class="tab-toolbar">
+                        <button class="btn btn-primary" onclick="loadEmployees()">
+                            <i class="fas fa-sync-alt"></i> Atualizar
+                        </button>
+                    </div>
+                    <div id="employees-list" class="list-container">
+                        <p class="empty-msg">Nenhum funcionário cadastrado.</p>
+                    </div>
+                </div>
+
+                <!-- PREÇOS -->
+                <div id="tab-pricing" class="tab-panel">
+                    <div id="pricing-list" class="list-container">
+                        <p class="empty-msg">Carregando preços...</p>
+                    </div>
+                </div>
+
+                <!-- COBRANÇA -->
+                <div id="tab-billing" class="tab-panel">
+                    <div class="billing-form">
+                        <h3>Enviar Cobrança</h3>
+                        <div class="form-group">
+                            <label>Jogador</label>
+                            <select id="billing-target"></select>
+                            <button class="btn btn-sm" onclick="loadNearbyPlayers()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="form-group">
+                            <label>Valor (R$)</label>
+                            <input type="number" id="billing-amount" min="100" step="100" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Descrição</label>
+                            <input type="text" id="billing-desc" placeholder="Serviço mecânico">
+                        </div>
+                        <button class="btn btn-primary" onclick="sendBill()">
+                            <i class="fas fa-paper-plane"></i> Enviar Cobrança
+                        </button>
+                    </div>
+                </div>
+
+                <!-- HISTÓRICO -->
+                <div id="tab-logs" class="tab-panel">
+                    <div class="tab-toolbar">
+                        <button class="btn btn-refresh" onclick="loadBillingHistory()">
+                            <i class="fas fa-sync-alt"></i> Atualizar
+                        </button>
+                    </div>
+                    <div id="logs-list" class="list-container">
+                        <p class="empty-msg">Nenhum registro.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

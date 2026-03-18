@@ -3,7 +3,7 @@
 -- ============================================================
 
 VRS = VRS or {}
-VRS.Locale = lib.require('locales.pt-BR')
+VRS.LoadLocale()
 
 -- Cache de cooldowns por jogador
 local playerCooldowns = {}

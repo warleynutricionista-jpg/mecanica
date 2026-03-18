@@ -3,8 +3,7 @@
 -- ============================================================
 
 VRS = VRS or {}
-VRS.Locale = lib.require('locales.pt-BR')
-VRS.L = VRS.Locale.UI
+VRS.LoadLocale()
 
 -- Cache local de status de veículos
 VRS.VehicleStatus = {}

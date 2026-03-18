@@ -3,15 +3,37 @@
 -- ============================================================
 
 local function getCurrencyLabel(currency)
+    currency = currency == 'money' and 'cash' or currency
     return currency == 'bank' and 'banco' or 'carteira'
 end
 
+local function normalizeCurrency(currency)
+    if currency == 'money' then
+        return 'cash'
+    end
+
+    return currency
+end
+
 local function getPlayerMoney(player, currency)
-    return player.PlayerData.money[currency] or 0
+    currency = normalizeCurrency(currency)
+    local money = player.Functions.GetMoney and player.Functions.GetMoney(currency) or nil
+
+    if type(money) == 'number' then
+        return money
+    end
+
+    return (player.PlayerData.money and player.PlayerData.money[currency]) or 0
 end
 
 local function removePlayerMoney(player, currency, amount, reason)
+    currency = normalizeCurrency(currency)
     return player.Functions.RemoveMoney(currency, amount, reason)
+end
+
+local function addPlayerMoney(player, currency, amount, reason)
+    currency = normalizeCurrency(currency)
+    return player.Functions.AddMoney(currency, amount, reason)
 end
 
 local function addItemToInventory(source, itemName, amount)
@@ -158,7 +180,7 @@ lib.callback.register('vrs_mechanic:server:purchasePartsItem', function(source, 
         return { success = false, reason = 'player_not_found' }
     end
 
-    local currency = Config.PartsShop.currency or 'money'
+    local currency = normalizeCurrency(Config.PartsShop.currency or 'cash')
     if getPlayerMoney(player, currency) < totalPrice then
         return { success = false, reason = 'insufficient_funds' }
     end
@@ -175,7 +197,7 @@ lib.callback.register('vrs_mechanic:server:purchasePartsItem', function(source, 
 
     local added = addItemToInventory(src, itemName, quantity)
     if not added then
-        player.Functions.AddMoney(currency, totalPrice, 'vrs_mechanic_parts_refund')
+        addPlayerMoney(player, currency, totalPrice, 'vrs_mechanic_parts_refund')
         return { success = false, reason = 'inventory_add_failed' }
     end
 

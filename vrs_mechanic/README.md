@@ -285,7 +285,7 @@ Cada item aceita, por exemplo:
 Em `config/items.lua`:
 
 ```lua
-currency = 'money'
+currency = 'cash'
 ```
 
 Você pode trocar para:
@@ -394,8 +394,8 @@ Em `config/shared.lua`:
 ```lua
 Config.Lift.levels = {
     { label = 'Base', zOffset = 0.0 },
-    { label = 'Serviço', zOffset = 1.2 },
-    { label = 'Alta', zOffset = 2.35 },
+    { label = 'Serviço', zOffset = 0.85 },
+    { label = 'Alta', zOffset = 1.35 },
 }
 ```
 

@@ -131,8 +131,8 @@ Config.Lift = {
     exitOffset = vec3(3.0, 0.0, 0.0), -- offset para sair do veículo
     levels = {
         { label = 'Base', zOffset = 0.0 },
-        { label = 'Serviço', zOffset = 1.2 },
-        { label = 'Alta', zOffset = 2.35 },
+        { label = 'Serviço', zOffset = 0.85 },
+        { label = 'Alta', zOffset = 1.35 },
     },
     moveDuration = 3500,
     maxDistance = 12.0,

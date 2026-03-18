@@ -96,7 +96,7 @@ Config.UpgradeMaterials = {
 -- ============================================================
 Config.PartsShop = {
     enabled = true,
-    currency = 'money', -- money = carteira | bank = banco
+    currency = 'cash', -- cash/money = carteira | bank = banco
     defaultPublic = false,
     requireDutyForWorkshopOnly = true,
     maxPurchaseQuantity = 20,

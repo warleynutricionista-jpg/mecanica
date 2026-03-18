@@ -3,7 +3,38 @@
 -- ============================================================
 
 local liftTargets = {}
+local panelTargets = {}
 local locationTargets = {}
+
+local function rotateOffset(offset, heading)
+    local radians = math.rad(heading or 0.0)
+    local cosHeading = math.cos(radians)
+    local sinHeading = math.sin(radians)
+
+    return vec3(
+        (offset.x * cosHeading) - (offset.y * sinHeading),
+        (offset.x * sinHeading) + (offset.y * cosHeading),
+        offset.z or 0.0
+    )
+end
+
+local function getLiftPanelCoords(lift)
+    if lift.controlPanel then
+        return lift.controlPanel
+    end
+
+    local offset = rotateOffset(Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0), lift.coords.w or 0.0)
+    return vec4(
+        lift.coords.x + offset.x,
+        lift.coords.y + offset.y,
+        lift.coords.z + offset.z,
+        lift.coords.w or 0.0
+    )
+end
+
+local function canUseLiftPanel(shopId)
+    return VRS.CanUseLift(shopId)
+end
 
 local function createLiftTargets(shopId, shop)
     if not shop.lifts then return end
@@ -19,10 +50,99 @@ local function createLiftTargets(shopId, shop)
                 {
                     name = liftId .. '_menu',
                     icon = 'fas fa-car-side',
-                    label = 'Elevador e serviços',
+                    label = 'Serviços do elevador',
                     distance = 3.0,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
+                    end,
+                },
+            },
+        })
+
+        local panelCoords = getLiftPanelCoords(lift)
+        local panelId = ('vrs_lift_panel_%s_%d'):format(shopId, i)
+        panelTargets[panelId] = exports.ox_target:addBoxZone({
+            coords = vec3(panelCoords.x, panelCoords.y, panelCoords.z),
+            size = Config.Lift.controlPanelSize or vec3(0.45, 0.55, 1.6),
+            rotation = panelCoords.w or 0.0,
+            debug = false,
+            options = {
+                {
+                    name = panelId .. '_up',
+                    icon = 'fas fa-arrow-up',
+                    label = 'Subir elevador',
+                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId)
+                    end,
+                    onSelect = function()
+                        VRS.UseLiftPanelAction(shopId, i, 'up')
+                    end,
+                },
+                {
+                    name = panelId .. '_down',
+                    icon = 'fas fa-arrow-down',
+                    label = 'Descer elevador',
+                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId)
+                    end,
+                    onSelect = function()
+                        VRS.UseLiftPanelAction(shopId, i, 'down')
+                    end,
+                },
+                {
+                    name = panelId .. '_save',
+                    icon = 'fas fa-floppy-disk',
+                    label = 'Salvar altura atual',
+                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId)
+                    end,
+                    onSelect = function()
+                        VRS.UseLiftPanelAction(shopId, i, 'save_current')
+                    end,
+                },
+                {
+                    name = panelId .. '_goto_saved',
+                    icon = 'fas fa-bookmark',
+                    label = 'Ir para altura salva',
+                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId)
+                    end,
+                    onSelect = function()
+                        VRS.UseLiftPanelAction(shopId, i, 'go_saved')
+                    end,
+                },
+                {
+                    name = panelId .. '_reset_height',
+                    icon = 'fas fa-rotate-left',
+                    label = 'Resetar para posição inicial',
+                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId)
+                    end,
+                    onSelect = function()
+                        VRS.UseLiftPanelAction(shopId, i, 'reset_height')
+                    end,
+                },
+                {
+                    name = panelId .. '_reset_saved',
+                    icon = 'fas fa-trash-can',
+                    label = 'Resetar altura salva',
+                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId)
+                    end,
+                    onSelect = function()
+                        VRS.UseLiftPanelAction(shopId, i, 'reset_saved')
                     end,
                 },
             },
@@ -163,6 +283,9 @@ AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
 
     for id in pairs(liftTargets) do
+        exports.ox_target:removeZone(id)
+    end
+    for id in pairs(panelTargets) do
         exports.ox_target:removeZone(id)
     end
     for id in pairs(locationTargets) do

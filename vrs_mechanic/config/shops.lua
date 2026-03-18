@@ -37,6 +37,7 @@ Config.Shops = {
                 coords = vec4(-340.95, -128.24, 39.0, 160.0),
                 length = 5.0,
                 width = 2.5,
+                controlPanel = vec4(-339.05, -129.09, 39.01, 71.44),
             },
             {
                 coords = vec4(-336.88, -131.56, 39.0, 160.0),

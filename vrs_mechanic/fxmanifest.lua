@@ -10,6 +10,7 @@ version '1.0.0'
 shared_scripts {
     '@ox_lib/init.lua',
     '@qbx_core/modules/lib.lua',
+    'shared/locale.lua',
 }
 
 client_scripts {
@@ -18,7 +19,9 @@ client_scripts {
     'config/shops.lua',
     'config/items.lua',
     'config/panel.lua',
-    'shared/*.lua',
+    'shared/constants.lua',
+    'shared/utils.lua',
+    'shared/vehicle.lua',
     'client/main.lua',
     'client/zones.lua',
     'client/target.lua',
@@ -38,7 +41,9 @@ server_scripts {
     'config/shops.lua',
     'config/items.lua',
     'config/panel.lua',
-    'shared/*.lua',
+    'shared/constants.lua',
+    'shared/utils.lua',
+    'shared/vehicle.lua',
     'server/main.lua',
     'server/panel_access.lua',
     'server/vehicles.lua',
@@ -55,15 +60,13 @@ server_scripts {
 ui_page 'web/index.html'
 
 files {
-    'locales/*.lua',
+    'locales/*.json',
     'web/index.html',
     'web/style.css',
     'web/app.js',
 }
 
-ox_libs {
-    'locale',
-}
+ox_lib 'locale'
 
 dependencies {
     'ox_lib',

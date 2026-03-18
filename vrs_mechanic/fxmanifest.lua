@@ -5,7 +5,7 @@ lua54 'yes'
 name 'vrs_mechanic'
 author 'VRS Development'
 description 'Sistema completo de mecânica para Qbox/QBX'
-version '1.0.0'
+version '1.1.0'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -30,6 +30,7 @@ client_scripts {
     'client/upgrades.lua',
     'client/duty.lua',
     'client/tablet.lua',
+    'client/shop.lua',
     'client/animations.lua',
     'client/degradation.lua',
     'client/hub.lua',
@@ -53,6 +54,8 @@ server_scripts {
     'server/billing.lua',
     'server/management.lua',
     'server/stashes.lua',
+    'server/shop.lua',
+    'server/lifts.lua',
     'server/upgrades_cb.lua',
     'server/logging.lua',
 }

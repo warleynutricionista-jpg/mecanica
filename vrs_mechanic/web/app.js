@@ -1,11 +1,23 @@
-// ============================================================
-// VRS_MECHANIC - TABLET APP (NUI)
-// ============================================================
+const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'vrs_mechanic';
 
-let currentData = {};
-let isManager = false;
+const state = {
+    open: false,
+    shopId: null,
+    shopLabel: 'Oficina',
+    activeTab: 'dashboard',
+    data: {},
+};
 
-const partLabels = {
+const statusLabels = {
+    open: 'Aberta',
+    progress: 'Em andamento',
+    waiting: 'Aguardando peça',
+    done: 'Concluída',
+    delivered: 'Entregue',
+};
+
+
+const serviceLabels = {
     engine: 'Motor',
     body: 'Carroceria',
     oil: 'Óleo',
@@ -16,331 +28,371 @@ const partLabels = {
     battery: 'Bateria',
     suspension: 'Suspensão',
     transmission: 'Transmissão',
-    fuel_tank: 'Tanque',
+    fuel_tank: 'Tanque de combustível',
     tyre: 'Pneu',
 };
 
-const statusLabels = {
-    open: 'Aberta',
-    progress: 'Em Andamento',
-    waiting: 'Aguardando Peça',
-    done: 'Concluída',
-    delivered: 'Entregue',
+const tabTitles = {
+    dashboard: 'Painel da oficina',
+    orders: 'Ordens de serviço',
+    shop: 'Loja e estoque',
+    employees: 'Funcionários',
+    pricing: 'Tabela de preços',
+    billing: 'Cobrança rápida',
+    logs: 'Histórico financeiro',
 };
 
-// ============================================================
-// NUI MESSAGE HANDLER
-// ============================================================
+const shopThemes = {
+    engine: 'theme-engine',
+    brakes: 'theme-brakes',
+    radiator: 'theme-radiator',
+    suspension: 'theme-suspension',
+    transmission: 'theme-transmission',
+    clutch: 'theme-clutch',
+    axle: 'theme-axle',
+    electrical: 'theme-electrical',
+    fluids: 'theme-fluids',
+    tools: 'theme-tools',
+    upgrades: 'theme-upgrades',
+    nitrous: 'theme-nitrous',
+};
 
-window.addEventListener('message', function (event) {
-    const msg = event.data;
+function qs(selector) {
+    return document.querySelector(selector);
+}
 
-    switch (msg.action) {
-        case 'open':
-            document.getElementById('tablet').classList.remove('hidden');
-            document.getElementById('shop-name').textContent = msg.shopLabel || 'Oficina';
-            break;
+function money(value) {
+    return `R$ ${Math.floor(Number(value) || 0).toLocaleString('pt-BR')}`;
+}
 
-        case 'close':
-            document.getElementById('tablet').classList.add('hidden');
-            break;
+function formatDate(value) {
+    if (!value) return 'Sem data';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return `${date.toLocaleDateString('pt-BR')} ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
-        case 'loadData':
-            currentData = msg.data || {};
-            isManager = msg.data.isManager || false;
+function nui(eventName, payload = {}) {
+    return fetch(`https://${resourceName}/${eventName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    })
+        .then((response) => response.json())
+        .catch(() => ({ success: false }));
+}
 
-            if (currentData.player) {
-                document.getElementById('player-name').textContent = currentData.player.name;
-            }
+function showTab(tab) {
+    state.activeTab = tab;
+    document.querySelectorAll('.tab-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === `tab-${tab}`);
+    });
 
-            updateDashboard();
-            loadOrders();
-            loadEmployees();
-            loadPricing();
-            break;
+    document.querySelectorAll('.nav-btn').forEach((button) => {
+        button.classList.toggle('active', button.dataset.tab === tab);
+    });
+
+    qs('#tab-title').textContent = tabTitles[tab] || 'Painel';
+}
+
+function renderDashboard() {
+    const stats = state.data.stats || {};
+    qs('#stat-total-orders').textContent = stats.totalOrders || 0;
+    qs('#stat-completed').textContent = stats.completedOrders || 0;
+    qs('#stat-revenue').textContent = money(stats.revenue || 0);
+    qs('#stat-employees').textContent = stats.employeeCount || 0;
+
+    const summary = [
+        ['Loja vinculada', state.shopLabel],
+        ['Permissão atual', state.data.permissionLevel || 'basic'],
+        ['Acesso à loja', state.data.canAccessShop ? 'Liberado' : 'Indisponível'],
+        ['Ordens pendentes', Math.max((stats.totalOrders || 0) - (stats.completedOrders || 0), 0)],
+    ];
+
+    qs('#dashboard-summary').innerHTML = summary
+        .map(([label, value]) => `<div class="summary-item"><span>${label}</span><strong>${value}</strong></div>`)
+        .join('');
+}
+
+function renderOrders() {
+    const filter = qs('#order-filter').value;
+    const orders = (state.data.orders || []).filter((order) => !filter || order.status === filter);
+    const container = qs('#orders-list');
+
+    if (!orders.length) {
+        container.innerHTML = '<div class="empty-state">Nenhuma ordem de serviço encontrada.</div>';
+        return;
+    }
+
+    container.innerHTML = orders.map((order) => {
+        const problems = (order.problems || []).map((item) => item.label || item.part).filter(Boolean).join(', ') || 'Sem itens detalhados';
+        const nextStatusMap = { open: 'progress', progress: 'done', waiting: 'progress', done: 'delivered' };
+        const nextStatus = nextStatusMap[order.status];
+        const actionButton = state.data.isManager && nextStatus
+            ? `<button class="secondary-btn" onclick="window.updateOrderStatus(${order.id}, '${nextStatus}')">Avançar para ${statusLabels[nextStatus]}</button>`
+            : '';
+
+        return `
+            <article class="list-card">
+                <div>
+                    <div class="list-title">OS #${order.id} · ${order.plate || 'Sem placa'}</div>
+                    <div class="list-subtitle">${order.model || 'Modelo não informado'} · ${problems}</div>
+                    <div class="list-subtitle">Responsável: ${order.mechanic_name || 'N/D'} · Orçamento: ${money(order.budget || 0)}</div>
+                </div>
+                <div class="list-actions">
+                    <span class="badge status-${order.status || 'open'}">${statusLabels[order.status] || order.status}</span>
+                    ${actionButton}
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function renderShop() {
+    const catalog = state.data.shopCatalog;
+    const categoriesContainer = qs('#shop-categories');
+    const previewContainer = qs('#shop-items-preview');
+    const openButton = qs('#shop-open-btn');
+
+    if (!catalog) {
+        qs('#shop-summary-text').textContent = 'Loja operacional indisponível para o seu perfil atual.';
+        categoriesContainer.innerHTML = '<div class="empty-state">Sem catálogo disponível.</div>';
+        previewContainer.innerHTML = '';
+        openButton.disabled = true;
+        return;
+    }
+
+    openButton.disabled = false;
+    qs('#shop-summary-text').textContent = `${catalog.public ? 'Loja pública' : 'Loja da oficina'} · pagamento via ${catalog.currencyLabel}.`;
+
+    categoriesContainer.innerHTML = (catalog.categories || []).map((category) => `
+        <article class="shop-card ${shopThemes[category.id] || 'theme-generic'}" data-category="${category.id}">
+            <div class="shop-card-media">
+                <span class="shop-card-icon">${category.icon || '🧩'}</span>
+                <small>${category.label}</small>
+            </div>
+            <div class="shop-card-body">
+                <strong>${category.icon || '🧩'} ${category.label}</strong>
+                <p>${category.description || 'Sem descrição.'}</p>
+                <small>${category.count || 0} item(ns) configurado(s)</small>
+            </div>
+        </article>
+    `).join('');
+
+    const previewItems = (catalog.items || []).slice(0, 6);
+    previewContainer.innerHTML = previewItems.map((item) => `
+        <article class="list-card compact">
+            <div>
+                <div class="list-title">${item.icon || '🧩'} ${item.label}</div>
+                <div class="list-subtitle">${item.description || 'Sem descrição.'}</div>
+            </div>
+            <div class="list-actions vertical">
+                <span class="badge neutral">${money(item.price)}</span>
+                <button class="secondary-btn" onclick="window.openPartsShop('${item.category}')">Comprar</button>
+            </div>
+        </article>
+    `).join('');
+
+    document.querySelectorAll('.shop-card').forEach((card) => {
+        card.addEventListener('click', () => window.openPartsShop(card.dataset.category));
+    });
+}
+
+function renderEmployees() {
+    const employees = state.data.employees || [];
+    const container = qs('#employees-list');
+    const hireButton = qs('#hire-employee-btn');
+    const employeeTarget = qs('#employee-target');
+    if (hireButton) hireButton.disabled = !state.data.isManager;
+    if (employeeTarget) employeeTarget.disabled = !state.data.isManager;
+
+    if (!employees.length) {
+        container.innerHTML = '<div class="empty-state">Nenhum funcionário vinculado à oficina.</div>';
+        return;
+    }
+
+    container.innerHTML = employees.map((employee) => `
+        <article class="list-card">
+            <div>
+                <div class="list-title">${employee.online ? '🟢' : '⚪'} ${employee.name}</div>
+                <div class="list-subtitle">Grade: ${employee.grade} · Contratado em ${formatDate(employee.hiredAt)}</div>
+            </div>
+            <div class="list-actions">
+                ${state.data.isManager ? `<button class="secondary-btn danger" onclick="window.fireEmployee('${employee.citizenid}')">Demitir</button>` : ''}
+            </div>
+        </article>
+    `).join('');
+}
+
+function renderPricing() {
+    const prices = state.data.prices || {};
+    const container = qs('#pricing-list');
+    const entries = Object.entries(prices);
+
+    if (!entries.length) {
+        container.innerHTML = '<div class="empty-state">Nenhum preço configurado.</div>';
+        return;
+    }
+
+    container.innerHTML = entries.map(([service, price]) => `
+        <div class="price-row">
+            <div>
+                <strong>${serviceLabels[service] || service}</strong>
+                <p class="muted">Valor operacional configurado para este serviço.</p>
+            </div>
+            <div class="inline-field compact">
+                <input class="field compact" type="number" id="price-${service}" value="${price}" ${state.data.isManager ? '' : 'disabled'}>
+                ${state.data.isManager ? `<button class="secondary-btn" onclick="window.savePrice('${service}')">Salvar</button>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderLogs() {
+    const logs = state.data.billingHistory || [];
+    const container = qs('#logs-list');
+
+    if (!logs.length) {
+        container.innerHTML = '<div class="empty-state">Nenhum registro financeiro encontrado.</div>';
+        return;
+    }
+
+    container.innerHTML = logs.map((log) => `
+        <article class="list-card">
+            <div>
+                <div class="list-title">${log.service_type || 'Serviço'} · ${money(log.amount || 0)}</div>
+                <div class="list-subtitle">${log.mechanic_name || 'Sem mecânico'} ${log.customer_name ? `· Cliente: ${log.customer_name}` : ''}</div>
+                <div class="list-subtitle">${formatDate(log.created_at)}</div>
+            </div>
+        </article>
+    `).join('');
+}
+
+function populateNearbyPlayers(players) {
+    const billingSelect = qs('#billing-target');
+    const employeeSelect = qs('#employee-target');
+    billingSelect.innerHTML = '';
+    if (employeeSelect) employeeSelect.innerHTML = '';
+
+    if (!players.length) {
+        billingSelect.innerHTML = '<option value="">Nenhum jogador próximo</option>';
+        if (employeeSelect) employeeSelect.innerHTML = '<option value="">Nenhum candidato próximo</option>';
+        return;
+    }
+
+    players.forEach((player) => {
+        const billingOption = document.createElement('option');
+        billingOption.value = player.id;
+        billingOption.textContent = `${player.name} (ID ${player.id})`;
+        billingSelect.appendChild(billingOption);
+
+        if (employeeSelect) {
+            const employeeOption = document.createElement('option');
+            employeeOption.value = player.id;
+            employeeOption.textContent = `${player.name} (ID ${player.id})`;
+            employeeSelect.appendChild(employeeOption);
+        }
+    });
+}
+
+function renderAll() {
+    qs('#shop-name').textContent = state.shopLabel;
+    qs('#shop-mode').textContent = state.data.canAccessShop ? 'Painel operacional e comercial' : 'Painel operacional';
+    qs('#player-name').textContent = state.data.player?.name || 'Operador';
+    qs('#player-role').textContent = `${state.data.player?.gradeName || 'Equipe'} · ${state.data.player?.onduty ? 'Em serviço' : 'Fora de serviço'}`;
+    renderDashboard();
+    renderOrders();
+    renderShop();
+    renderEmployees();
+    renderPricing();
+    renderLogs();
+}
+
+window.updateOrderStatus = async (orderId, status) => {
+    const result = await nui('updateOrderStatus', { orderId, status });
+    if (result?.success) await nui('refreshTablet');
+};
+
+window.savePrice = async (service) => {
+    const value = Number(qs(`#price-${service}`).value);
+    if (Number.isNaN(value) || value < 0) return;
+    await nui('updatePrice', { service, price: value });
+    await nui('refreshTablet');
+};
+
+window.fireEmployee = async (citizenid) => {
+    await nui('fireEmployee', { citizenid });
+    await nui('refreshTablet');
+};
+
+window.hireEmployee = async () => {
+    const targetId = Number(qs('#employee-target')?.value);
+    if (!targetId) return;
+    await nui('hireEmployee', { targetId });
+    await nui('refreshTablet');
+};
+
+window.openPartsShop = async (category) => {
+    await nui('openPartsShop', { shopId: state.shopId, category });
+};
+
+window.addEventListener('message', async (event) => {
+    const message = event.data || {};
+    if (message.action === 'open') {
+        state.open = true;
+        state.shopId = message.shopId;
+        state.shopLabel = message.shopLabel || 'Oficina';
+        state.data = message.data || {};
+        qs('#tablet').classList.remove('hidden');
+        showTab('dashboard');
+        renderAll();
+        const players = await nui('getNearbyPlayers');
+        populateNearbyPlayers(players || []);
+    }
+
+    if (message.action === 'hydrate') {
+        state.data = message.data || {};
+        renderAll();
+        const players = await nui('getNearbyPlayers');
+        populateNearbyPlayers(players || []);
+    }
+
+    if (message.action === 'close') {
+        state.open = false;
+        qs('#tablet').classList.add('hidden');
+    }
+
+    if (message.action === 'focusTab' && message.tab) {
+        showTab(message.tab);
     }
 });
 
-// ============================================================
-// TABS
-// ============================================================
+document.querySelectorAll('.nav-btn').forEach((button) => {
+    button.addEventListener('click', () => showTab(button.dataset.tab));
+});
 
-function switchTab(tabName) {
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+document.querySelectorAll('[data-open-tab]').forEach((button) => {
+    button.addEventListener('click', () => showTab(button.dataset.openTab));
+});
 
-    const panel = document.getElementById('tab-' + tabName);
-    const btn = document.querySelector('[data-tab="' + tabName + '"]');
-    if (panel) panel.classList.add('active');
-    if (btn) btn.classList.add('active');
+qs('#close-btn').addEventListener('click', () => nui('close'));
+qs('#refresh-btn').addEventListener('click', () => nui('refreshTablet'));
+qs('#reload-players-btn').addEventListener('click', async () => populateNearbyPlayers(await nui('getNearbyPlayers') || []));
+qs('#hire-employee-btn')?.addEventListener('click', () => window.hireEmployee());
+qs('#shop-open-btn').addEventListener('click', () => window.openPartsShop());
+qs('#order-filter').addEventListener('change', renderOrders);
+qs('#send-bill-btn').addEventListener('click', async () => {
+    const targetId = Number(qs('#billing-target').value);
+    const amount = Number(qs('#billing-amount').value);
+    const description = qs('#billing-desc').value.trim();
+    if (!targetId || !amount) return;
+    await nui('sendBill', { targetId, amount, description: description || 'Serviço mecânico' });
+    qs('#billing-amount').value = '';
+    qs('#billing-desc').value = '';
+});
 
-    // Load data on tab switch
-    if (tabName === 'orders') loadOrders();
-    if (tabName === 'employees') loadEmployees();
-    if (tabName === 'pricing') loadPricing();
-    if (tabName === 'billing') loadNearbyPlayers();
-    if (tabName === 'logs') loadBillingHistory();
-}
-
-// ============================================================
-// DASHBOARD
-// ============================================================
-
-function updateDashboard() {
-    const stats = currentData.stats || {};
-    document.getElementById('stat-total-orders').textContent = stats.totalOrders || 0;
-    document.getElementById('stat-completed').textContent = stats.completedOrders || 0;
-    document.getElementById('stat-revenue').textContent = 'R$ ' + formatMoney(stats.revenue || 0);
-    document.getElementById('stat-employees').textContent = stats.employeeCount || 0;
-}
-
-// ============================================================
-// ORDERS
-// ============================================================
-
-function loadOrders() {
-    const filter = document.getElementById('order-filter');
-    const status = filter ? filter.value : '';
-
-    fetchNUI('getWorkOrders', { status: status }).then(orders => {
-        const container = document.getElementById('orders-list');
-        if (!orders || orders.length === 0) {
-            container.innerHTML = '<p class="empty-msg">Nenhuma ordem de serviço.</p>';
-            return;
-        }
-
-        container.innerHTML = orders.map(order => {
-            const statusClass = 'status-' + (order.status || 'open');
-            const statusLabel = statusLabels[order.status] || order.status;
-            const problems = order.problems || [];
-            const problemsText = problems.map(p => p.label || p.part).join(', ') || 'N/A';
-
-            return '<div class="list-card">' +
-                '<div class="card-info">' +
-                '<div class="card-title">OS #' + order.id + ' - ' + order.plate + '</div>' +
-                '<div class="card-subtitle">' + problemsText + ' | R$ ' + formatMoney(order.budget || 0) + '</div>' +
-                '<div class="card-subtitle">Mecânico: ' + (order.mechanic_name || 'N/A') + '</div>' +
-                '</div>' +
-                '<div class="card-actions">' +
-                '<span class="status-badge ' + statusClass + '">' + statusLabel + '</span>' +
-                (isManager ? buildOrderActions(order) : '') +
-                '</div>' +
-                '</div>';
-        }).join('');
-    });
-}
-
-function buildOrderActions(order) {
-    const nextStatus = {
-        open: 'progress',
-        progress: 'done',
-        waiting: 'progress',
-        done: 'delivered',
-    };
-
-    const next = nextStatus[order.status];
-    if (!next) return '';
-
-    const nextLabel = statusLabels[next] || next;
-    return '<button class="btn btn-sm btn-success" onclick="updateOrderStatus(' +
-        order.id + ', \'' + next + '\')">' +
-        '<i class="fas fa-arrow-right"></i> ' + nextLabel + '</button>';
-}
-
-function updateOrderStatus(orderId, status) {
-    fetchNUI('updateOrderStatus', { orderId: orderId, status: status }).then(result => {
-        if (result && result.success) {
-            loadOrders();
-        }
-    });
-}
-
-// ============================================================
-// EMPLOYEES
-// ============================================================
-
-function loadEmployees() {
-    fetchNUI('getEmployees', {}).then(employees => {
-        const container = document.getElementById('employees-list');
-        if (!employees || employees.length === 0) {
-            container.innerHTML = '<p class="empty-msg">Nenhum funcionário cadastrado.</p>';
-            return;
-        }
-
-        container.innerHTML = employees.map(emp => {
-            const onlineClass = emp.online ? 'on' : 'off';
-            const onlineText = emp.online ? 'Online' : 'Offline';
-
-            return '<div class="list-card">' +
-                '<div class="card-info">' +
-                '<div class="card-title">' +
-                '<span class="online-dot ' + onlineClass + '"></span>' +
-                emp.name + '</div>' +
-                '<div class="card-subtitle">Cargo: ' + emp.grade + ' | ' + onlineText + '</div>' +
-                '</div>' +
-                (isManager ? '<div class="card-actions">' +
-                    '<button class="btn btn-sm btn-danger" onclick="fireEmployee(\'' + emp.citizenid + '\')">' +
-                    '<i class="fas fa-user-minus"></i></button>' +
-                    '</div>' : '') +
-                '</div>';
-        }).join('');
-    });
-}
-
-function fireEmployee(citizenid) {
-    if (!confirm('Tem certeza que deseja demitir este funcionário?')) return;
-    fetchNUI('fireEmployee', { citizenid: citizenid }).then(result => {
-        if (result && result.success) {
-            loadEmployees();
-        }
-    });
-}
-
-// ============================================================
-// PRICING
-// ============================================================
-
-function loadPricing() {
-    fetchNUI('getPrices', {}).then(prices => {
-        const container = document.getElementById('pricing-list');
-        if (!prices || Object.keys(prices).length === 0) {
-            container.innerHTML = '<p class="empty-msg">Nenhum preço configurado.</p>';
-            return;
-        }
-
-        container.innerHTML = Object.entries(prices).map(([service, price]) => {
-            const label = partLabels[service] || service;
-            return '<div class="price-row">' +
-                '<span class="price-label">' + label + '</span>' +
-                '<div style="display:flex;gap:6px;align-items:center">' +
-                '<span>R$</span>' +
-                '<input type="number" class="price-input" value="' + price + '" ' +
-                'id="price-' + service + '" ' +
-                (isManager ? '' : 'disabled') + '>' +
-                (isManager ? '<button class="btn btn-sm btn-success" onclick="savePrice(\'' +
-                    service + '\')"><i class="fas fa-save"></i></button>' : '') +
-                '</div></div>';
-        }).join('');
-    });
-}
-
-function savePrice(service) {
-    const input = document.getElementById('price-' + service);
-    if (!input) return;
-    const price = parseFloat(input.value);
-    if (isNaN(price) || price < 0) return;
-
-    fetchNUI('updatePrice', { service: service, price: price }).then(result => {
-        if (result && result.success) {
-            input.style.borderColor = '#4caf50';
-            setTimeout(() => { input.style.borderColor = ''; }, 1500);
-        }
-    });
-}
-
-// ============================================================
-// BILLING
-// ============================================================
-
-function loadNearbyPlayers() {
-    fetchNUI('getNearbyPlayers', {}).then(players => {
-        const select = document.getElementById('billing-target');
-        select.innerHTML = '';
-
-        if (!players || players.length === 0) {
-            select.innerHTML = '<option value="">Nenhum jogador próximo</option>';
-            return;
-        }
-
-        players.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.name + ' (ID: ' + p.id + ')';
-            select.appendChild(opt);
-        });
-    });
-}
-
-function sendBill() {
-    const targetId = document.getElementById('billing-target').value;
-    const amount = parseFloat(document.getElementById('billing-amount').value);
-    const desc = document.getElementById('billing-desc').value;
-
-    if (!targetId || isNaN(amount) || amount <= 0) return;
-
-    fetchNUI('sendBill', {
-        targetId: parseInt(targetId),
-        amount: amount,
-        description: desc || 'Serviço mecânico',
-    }).then(result => {
-        if (result && result.success) {
-            document.getElementById('billing-amount').value = '';
-            document.getElementById('billing-desc').value = '';
-        }
-    });
-}
-
-// ============================================================
-// LOGS
-// ============================================================
-
-function loadBillingHistory() {
-    fetchNUI('getBillingHistory', {}).then(logs => {
-        const container = document.getElementById('logs-list');
-        if (!logs || logs.length === 0) {
-            container.innerHTML = '<p class="empty-msg">Nenhum registro.</p>';
-            return;
-        }
-
-        container.innerHTML = logs.map(log => {
-            return '<div class="list-card">' +
-                '<div class="card-info">' +
-                '<div class="card-title">' + (log.service_type || 'N/A') +
-                ' - R$ ' + formatMoney(log.amount || 0) + '</div>' +
-                '<div class="card-subtitle">' +
-                'Mecânico: ' + (log.mechanic_name || 'N/A') +
-                (log.customer_name ? ' | Cliente: ' + log.customer_name : '') +
-                '</div>' +
-                '<div class="card-subtitle">' + formatDate(log.created_at) + '</div>' +
-                '</div></div>';
-        }).join('');
-    });
-}
-
-// ============================================================
-// UTILITIES
-// ============================================================
-
-function fetchNUI(event, data) {
-    return fetch('https://vrs_mechanic/' + event, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data || {}),
-    }).then(resp => resp.json()).catch(() => null);
-}
-
-function closeTablet() {
-    fetchNUI('close', {});
-    document.getElementById('tablet').classList.add('hidden');
-}
-
-function formatMoney(amount) {
-    return Math.floor(amount).toLocaleString('pt-BR');
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return 'N/A';
-    try {
-        const d = new Date(dateStr);
-        return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-        return dateStr;
-    }
-}
-
-// Close on ESC
-document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-        closeTablet();
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.open) {
+        nui('close');
     }
 });

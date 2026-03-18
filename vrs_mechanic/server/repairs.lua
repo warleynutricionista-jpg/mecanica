@@ -80,13 +80,9 @@ lib.callback.register('vrs_mechanic:server:repairPart', function(source, data)
     end
 
     -- Validar distância
-    if netId then
-        local entity = NetworkGetEntityFromNetworkId(netId)
-        if entity and entity ~= 0 then
-            if not VRS.ValidateDistance(src, entity, 10.0) then
-                return { success = false, reason = 'too_far' }
-            end
-        end
+    local validVehicle, _, vehicleReason = VRS.ValidateVehicleContext(src, plate, netId, 10.0)
+    if not validVehicle then
+        return { success = false, reason = vehicleReason or 'invalid_vehicle' }
     end
 
     -- Verificar e consumir materiais
@@ -145,13 +141,9 @@ lib.callback.register('vrs_mechanic:server:streetRepair', function(source, data)
     end
 
     -- Validar distância
-    if netId then
-        local entity = NetworkGetEntityFromNetworkId(netId)
-        if entity and entity ~= 0 then
-            if not VRS.ValidateDistance(src, entity, 5.0) then
-                return { success = false, reason = 'too_far' }
-            end
-        end
+    local validVehicle, _, vehicleReason = VRS.ValidateVehicleContext(src, plate, netId, 5.0)
+    if not validVehicle then
+        return { success = false, reason = vehicleReason or 'invalid_vehicle' }
     end
 
     -- Verificar e consumir materiais
@@ -193,6 +185,7 @@ lib.callback.register('vrs_mechanic:server:changeOil', function(source, data)
     local src = source
     local plate = data.plate
     local shopId = data.shopId
+    local netId = data.netId
 
     if not plate then
         return { success = false, reason = 'invalid_data' }
@@ -200,6 +193,11 @@ lib.callback.register('vrs_mechanic:server:changeOil', function(source, data)
 
     if not VRS.CheckCooldown(src, 'repair') then
         return { success = false, reason = 'cooldown' }
+    end
+
+    local validVehicle, _, vehicleReason = VRS.ValidateVehicleContext(src, plate, netId, 10.0)
+    if not validVehicle then
+        return { success = false, reason = vehicleReason or 'invalid_vehicle' }
     end
 
     -- Verificar item de óleo

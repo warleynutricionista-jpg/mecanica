@@ -47,7 +47,7 @@ function VRS.OpenUpgradeMenu(vehicle, shopId)
                 if m.amount > 0 then
                     local count = lib.callback.await('vrs_mechanic:server:hasItem', false, m.item, m.amount)
                     if not count then hasMats = false end
-                    matNames[#matNames + 1] = ('%dx %s'):format(m.amount, m.item)
+                    matNames[#matNames + 1] = ('%dx %s'):format(m.amount, VRS.GetItemLabel(m.item))
                 end
             end
             matsText = table.concat(matNames, ', ')
@@ -138,9 +138,3 @@ function VRS.InstallUpgrade(vehicle, upgradeType, shopId)
         end
     end
 end
-
--- ============================================================
--- SERVER: INSTALAR UPGRADE (registrado no server via callback)
--- ============================================================
--- Nota: o callback está registrado aqui por referência, mas a
--- lógica real está no server/repairs.lua ou server/main.lua

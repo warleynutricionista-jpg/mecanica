@@ -129,6 +129,14 @@ Config.Billing = {
 Config.Lift = {
     snapDistance = 5.0, -- distância máxima para colocar veículo
     exitOffset = vec3(3.0, 0.0, 0.0), -- offset para sair do veículo
+    levels = {
+        { label = 'Base', zOffset = 0.0 },
+        { label = 'Serviço', zOffset = 1.2 },
+        { label = 'Alta', zOffset = 2.35 },
+    },
+    moveDuration = 3500,
+    maxDistance = 12.0,
+    requireVehicleToRaise = true,
 }
 
 -- ============================================================
@@ -169,4 +177,5 @@ Config.Cooldowns = {
     diagnostic = 3000,
     billing = 10000,
     upgrade = 10000,
+    partsShop = 1500,
 }

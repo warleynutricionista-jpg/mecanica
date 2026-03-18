@@ -744,7 +744,7 @@ AddStateBagChangeHandler("applyVehicleProps", "", function(bagName, _, props)
         break
       end
 
-      attempts += 1
+      attempts = attempts + 1
       Wait(100)
     end
   end)

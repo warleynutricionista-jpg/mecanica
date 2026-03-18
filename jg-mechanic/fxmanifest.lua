@@ -7,8 +7,11 @@ version 'v1.4.1'
 author "JG Scripts"
 
 dependencies {
+  "qbx_core",
   "oxmysql",
   "ox_lib",
+  "ox_target",
+  "ox_inventory",
   "jg-vehiclemileage",
   "/server:7290",
   "/onesync",

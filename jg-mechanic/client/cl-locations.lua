@@ -70,7 +70,7 @@ function createMechanicZonesAndBlips()
   local lifts, attempts, maxAttempts = false, 0, 3
   while not lifts and attempts < maxAttempts do
     lifts = lib.callback.await("jg-mechanic:server:get-created-lifts")
-    attempts += 1
+    attempts = attempts + 1
     Wait(2500)
   end
 

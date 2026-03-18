@@ -22,7 +22,7 @@ function Framework.Server.GetPlate(vehicle)
   if not plate or plate == nil or plate == "" then return false end
 
   if GetResourceState("brazzers-fakeplates") == "started" then
-    local result = MySQL.scalar.await("SELECT plate FROM player_vehicles WHERE fakeplate = ?", {fakeplate})
+    local result = MySQL.scalar.await("SELECT plate FROM player_vehicles WHERE fakeplate = ?", {plate})
     if result then return result end
   end
 
@@ -67,10 +67,12 @@ function Framework.Server.HasItem(src, itemName, qty)
     itemCount = exports['qs-inventory']:GetItemTotalAmount(src, itemName)
   elseif Config.Framework == "QBCore" or Config.Inventory == "qb-inventory" then
     local Player = Framework.Server.GetPlayer(src)
-    itemCount = Player.Functions.GetItemByName(itemName)?.amount or 0
+    local item = Player and Player.Functions.GetItemByName(itemName)
+    itemCount = item and item.amount or 0
   elseif Config.Framework == "ESX" or Config.Inventory == "esx_inventory" then
     local xPlayer = ESX.GetPlayerFromId(src)
-    itemCount = xPlayer.getInventoryItem(itemName)?.count or 0
+    local item = xPlayer and xPlayer.getInventoryItem(itemName)
+    itemCount = item and item.count or 0
   else
     return false
   end
@@ -150,6 +152,8 @@ end)
 
 ---@param src integer
 function Framework.Server.GetPlayer(src)
+  if not src then return false end
+
   if Config.Framework == "QBCore" then
     return QBCore.Functions.GetPlayer(src)
   elseif Config.Framework == "Qbox" then
@@ -157,6 +161,8 @@ function Framework.Server.GetPlayer(src)
   elseif Config.Framework == "ESX" then
     return ESX.GetPlayerFromId(src)
   end
+
+  return false
 end
 
 ---@param src integer
@@ -165,8 +171,9 @@ function Framework.Server.GetPlayerInfo(src)
   if not player then return false end
 
   if Config.Framework == "QBCore" or Config.Framework == "Qbox" then
+    local charinfo = player.PlayerData and player.PlayerData.charinfo or {}
     return {
-      name = player.PlayerData.charinfo.firstname .. " " .. player.PlayerData.charinfo.lastname
+      name = ((charinfo.firstname or "") .. " " .. (charinfo.lastname or "")):gsub("^%s*(.-)%s*$", "%1")
     }
   elseif Config.Framework == "ESX" then
     return {
@@ -403,23 +410,29 @@ function Framework.Server.PlayerSetJobOffline(identifier, job, role)
   end
 end
 
----@param toggle boolean
+---@param toggle boolean|nil
 function Framework.Server.PlayerToggleJobDuty(src, toggle)
   if Config.Framework == "QBCore" or Config.Framework == "Qbox" then
     local Player = Framework.Server.GetPlayer(src)
-    if Player.PlayerData.job.onduty then
-      Player.Functions.SetJobDuty(false)
-    else
-      Player.Functions.SetJobDuty(true)
+    if not Player or not Player.PlayerData or not Player.PlayerData.job then return false end
+
+    local desiredDuty = toggle
+    if desiredDuty == nil then
+      desiredDuty = not Player.PlayerData.job.onduty
     end
-    TriggerClientEvent("QBCore:Client:SetDuty", src, Player.PlayerData.job.onduty)
+
+    Player.Functions.SetJobDuty(desiredDuty)
+    TriggerClientEvent("QBCore:Client:SetDuty", src, desiredDuty)
+    return desiredDuty
   elseif Config.Framework == "ESX" then
     -- Not supported natively in ESX, if you have a job script that supports it though add the export here!
   end
+
+  return false
 end
 
 lib.callback.register("jg-mechanic:server:toggle-duty", function(src, toggle)
-  Framework.Server.PlayerToggleJobDuty(src, toggle)
+  return Framework.Server.PlayerToggleJobDuty(src, toggle)
 end)
 
 -- 
@@ -572,13 +585,21 @@ end)
 ---@param plate string
 ---@param props table
 lib.callback.register("jg-mechanic:server:save-vehicle-props", function(src, plate, props)
-  if not plate or not props or type(props) ~= "table" then
+  if type(plate) ~= "string" or plate == "" or type(props) ~= "table" then
+    return false
+  end
+
+  local cleanPlate = string.gsub(plate, "^%s*(.-)%s*$", "%1")
+  if cleanPlate == "" then return false end
+
+  local encodedProps = json.encode(props)
+  if not encodedProps or #encodedProps > 250000 then
     return false
   end
 
   MySQL.update.await(
     "UPDATE " .. Framework.VehiclesTable .. " SET " .. Framework.VehProps .. " = ? WHERE plate = ?",
-    { json.encode(props), plate }
+    { encodedProps, cleanPlate }
   )
 
   return true

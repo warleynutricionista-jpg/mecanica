@@ -37,6 +37,7 @@ function VRS.OpenUpgradeMenu(vehicle, shopId)
     for _, upgradeType in ipairs(VRS.UpgradeTypes) do
         local label = VRS.L.upgrade[upgradeType] or upgradeType
         local materials = Config.UpgradeMaterials[upgradeType]
+        local context = VRS.GetServiceContext('upgrade', upgradeType)
 
         -- Verificar materiais
         local hasMats = true
@@ -55,7 +56,11 @@ function VRS.OpenUpgradeMenu(vehicle, shopId)
 
         options[#options + 1] = {
             title = label,
-            description = ('Materiais: %s %s'):format(matsText, not hasMats and '| SEM MATERIAIS' or ''),
+            description = ('Materiais: %s%s%s'):format(
+                matsText,
+                context and (' | Área: %s'):format(context.serviceArea or 'geral') or '',
+                not hasMats and ' | SEM MATERIAIS' or ''
+            ),
             icon = 'fas fa-bolt',
             iconColor = hasMats and '#4CAF50' or '#F44336',
             disabled = not hasMats,
@@ -81,20 +86,24 @@ end
 ---@param upgradeType string
 ---@param shopId string
 function VRS.InstallUpgrade(vehicle, upgradeType, shopId)
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'upgrade', upgradeType)
+    if not serviceState then return end
+
     -- Skill check
     if Config.Upgrades.skillCheck then
         local success = lib.skillCheck(Config.Upgrades.skillCheck)
         if not success then
+            VRS.FinishContextualVehicleService(vehicle, serviceState)
             lib.notify({ title = 'Falha', description = VRS.L.repair.skill_failed, type = 'error' })
             return
         end
     end
 
     local label = VRS.L.upgrade[upgradeType] or upgradeType
-    VRS.PlayAnimation('repair')
+    VRS.PlayAnimation(serviceState.context.animationSet or 'upgrade_install')
 
     local success = lib.progressBar({
-        duration = Config.Upgrades.duration or 15000,
+        duration = serviceState.context.duration or Config.Upgrades.duration or 15000,
         label = VRS.L.upgrade.installing:format(label),
         useWhileDead = false,
         canCancel = true,
@@ -102,6 +111,7 @@ function VRS.InstallUpgrade(vehicle, upgradeType, shopId)
     })
 
     VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
 
     if not success then
         lib.notify({ title = 'Cancelado', description = VRS.L.upgrade.failed, type = 'error' })
@@ -133,6 +143,10 @@ function VRS.InstallUpgrade(vehicle, upgradeType, shopId)
         local reason = result and result.reason or 'unknown'
         if reason == 'no_materials' then
             lib.notify({ title = 'Erro', description = VRS.L.repair.no_items, type = 'error' })
+        elseif reason == 'lift_required' then
+            lib.notify({ title = 'Erro', description = 'Este upgrade exige o veículo no elevador.', type = 'error' })
+        elseif reason == 'lift_too_low' then
+            lib.notify({ title = 'Erro', description = 'Elevador muito baixo para este upgrade.', type = 'error' })
         else
             lib.notify({ title = 'Erro', description = 'Erro na instalação.', type = 'error' })
         end

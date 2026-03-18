@@ -12,6 +12,7 @@ VRS.VehicleStatus = {}
 VRS.CurrentShop = nil   -- shopId da oficina atual
 VRS.InShopZone = false
 VRS.OnLift = {}         -- { [liftIndex] = netId }
+VRS.LiftState = {}
 
 -- ============================================================
 -- SYNC DE STATUS

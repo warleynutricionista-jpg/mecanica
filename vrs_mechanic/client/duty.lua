@@ -2,24 +2,6 @@
 -- VRS_MECHANIC - DUTY / STASH / LIFTS CLIENT
 -- ============================================================
 
-local function getLiftKey(shopId, liftIndex)
-    return ('%s_%s'):format(shopId, liftIndex)
-end
-
-local function getLiftHeightLabel(level)
-    local config = Config.Lift.levels[level]
-    return config and config.label or ('Nível %d'):format(level)
-end
-
-local function getLiftWorldCoords(shopId, liftIndex, level)
-    local shop = Config.Shops[shopId]
-    local lift = shop and shop.lifts and shop.lifts[liftIndex]
-    local liftLevel = Config.Lift.levels[level or 1]
-    if not lift or not liftLevel then return nil end
-
-    return vec3(lift.coords.x, lift.coords.y, lift.coords.z + (liftLevel.zOffset or 0.0)), lift.coords.w or 0.0
-end
-
 function VRS.ToggleDuty()
     if not VRS.IsMechanic() then
         lib.notify({ title = 'Erro', description = VRS.L.repair.not_mechanic, type = 'error' })
@@ -56,63 +38,22 @@ function VRS.OpenStash(shopId)
     lib.callback.await('vrs_mechanic:server:openStash', false, shopId)
 end
 
-local function applyLiftState(shopId, liftIndex, state)
-    if not state then return end
-
-    local liftKey = getLiftKey(shopId, liftIndex)
-    VRS.LiftState = VRS.LiftState or {}
-    VRS.LiftState[liftKey] = state
-    VRS.OnLift[liftKey] = state.vehicleNetId
-
-    if not state.vehicleNetId then return end
-
-    local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
-    if vehicle == 0 or not DoesEntityExist(vehicle) then return end
-
-    local coords, heading = getLiftWorldCoords(shopId, liftIndex, state.level or 1)
-    if not coords then return end
-
-    SetEntityCoords(vehicle, coords.x, coords.y, coords.z, false, false, false, false)
-    SetEntityHeading(vehicle, heading)
-    FreezeEntityPosition(vehicle, true)
-    SetVehicleEngineOn(vehicle, false, true, true)
-end
-
-RegisterNetEvent('vrs_mechanic:client:syncLiftState', function(shopId, liftIndex, state)
-    applyLiftState(shopId, liftIndex, state)
-end)
-
-local function refreshLiftState(shopId, liftIndex)
-    local state = lib.callback.await('vrs_mechanic:server:getLiftState', false, shopId, liftIndex)
-    if state then
-        applyLiftState(shopId, liftIndex, state)
-    end
-    return state
-end
-
 local function moveLift(shopId, liftIndex, direction)
-    local result = lib.callback.await('vrs_mechanic:server:updateLiftLevel', false, shopId, liftIndex, direction)
-    if result and result.success then
-        applyLiftState(shopId, liftIndex, result.state)
+    local ok, state = VRS.SetLiftHeight(
+        shopId,
+        liftIndex,
+        ((VRS.LiftState and VRS.LiftState[VRS.GetLiftKey(shopId, liftIndex)] and VRS.LiftState[VRS.GetLiftKey(shopId, liftIndex)].height) or (Config.Lift.MinHeight or 0.0))
+            + ((direction == 'up') and (Config.Lift.StepHeight or 0.15) or -(Config.Lift.StepHeight or 0.15)),
+        true
+    )
+
+    if ok and state then
         lib.notify({
             title = 'Elevador',
-            description = ('Elevador ajustado para o nível %s.'):format(getLiftHeightLabel(result.state.level)),
+            description = ('Elevador ajustado para %s.'):format(VRS.GetLiftHeightLabel(state.height or 0.0)),
             type = 'success',
         })
-        Wait(150)
-        VRS.OpenLiftMenu(shopId, liftIndex)
-        return
     end
-
-    local reason = result and result.reason or 'unknown'
-    local messages = {
-        lift_empty = 'Não há veículo no elevador para mover.',
-        already_top = 'O elevador já está na posição máxima.',
-        already_bottom = 'O elevador já está totalmente abaixado.',
-        no_access = VRS.L.notify.no_permission,
-        not_on_duty = VRS.L.repair.not_on_duty,
-    }
-    lib.notify({ title = 'Elevador', description = messages[reason] or 'Não foi possível mover o elevador.', type = 'error' })
 end
 
 function VRS.OpenLiftMenu(shopId, liftIndex)
@@ -130,15 +71,15 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         end
     end
 
-    local liftKey = getLiftKey(shopId, liftIndex)
-    local state = refreshLiftState(shopId, liftIndex) or (VRS.LiftState and VRS.LiftState[liftKey]) or { level = 1 }
+    local liftKey = VRS.GetLiftKey(shopId, liftIndex)
+    local state = VRS.RefreshLiftState(shopId, liftIndex) or (VRS.LiftState and VRS.LiftState[liftKey]) or { height = Config.Lift.MinHeight or 0.0 }
     local vehicleNetId = state.vehicleNetId
     local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
 
     local options = {
         {
             title = 'Status do Elevador',
-            description = ('Posição atual: %s'):format(getLiftHeightLabel(state.level or 1)),
+            description = ('Altura atual: %.2fm | %s'):format(state.height or 0.0, VRS.GetLiftHeightLabel(state.height or 0.0)),
             icon = 'fas fa-arrows-up-down',
             readOnly = true,
         },
@@ -188,7 +129,7 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
 
         options[#options + 1] = {
             title = 'Subir elevador',
-            description = 'Elevar o veículo para inspeção inferior.',
+            description = 'Elevar o veículo por um passo configurável.',
             icon = 'fas fa-arrow-up',
             onSelect = function()
                 moveLift(shopId, liftIndex, 'up')
@@ -197,7 +138,7 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
 
         options[#options + 1] = {
             title = 'Descer elevador',
-            description = 'Trazer o veículo para o nível inferior.',
+            description = 'Baixar o veículo por um passo configurável.',
             icon = 'fas fa-arrow-down',
             onSelect = function()
                 moveLift(shopId, liftIndex, 'down')
@@ -205,10 +146,46 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         }
 
         options[#options + 1] = {
+            title = 'Modo manual com setas',
+            description = 'Use seta para cima/baixo para ajuste fino e ESC para sair.',
+            icon = 'fas fa-keyboard',
+            onSelect = function()
+                VRS.StartManualLiftControl(shopId, liftIndex)
+            end,
+        }
+
+        options[#options + 1] = {
+            title = 'Altura de serviço do motor',
+            description = ('Ajustar para %.2fm.'):format((Config.Lift.DefaultWorkHeights and Config.Lift.DefaultWorkHeights.engine) or 0.45),
+            icon = 'fas fa-engine',
+            onSelect = function()
+                VRS.SetLiftPreset(shopId, liftIndex, 'engine')
+            end,
+        }
+
+        options[#options + 1] = {
+            title = 'Altura de serviço inferior',
+            description = ('Ajustar para %.2fm.'):format((Config.Lift.DefaultWorkHeights and Config.Lift.DefaultWorkHeights.underbody) or 1.15),
+            icon = 'fas fa-car-burst',
+            onSelect = function()
+                VRS.SetLiftPreset(shopId, liftIndex, 'underbody')
+            end,
+        }
+
+        options[#options + 1] = {
+            title = 'Retornar à posição inicial',
+            description = 'Baixar totalmente o elevador até a base.',
+            icon = 'fas fa-rotate-left',
+            onSelect = function()
+                VRS.SetLiftPreset(shopId, liftIndex, 'reset')
+            end,
+        }
+
+        options[#options + 1] = {
             title = VRS.L.shop.lift_remove,
-            description = (state.level or 1) > 1 and 'Abaixe totalmente o elevador antes de retirar o veículo.' or 'Liberar o veículo da plataforma.',
+            description = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.01) and 'Abaixe totalmente o elevador antes de retirar o veículo.' or 'Liberar o veículo da plataforma.',
             icon = 'fas fa-right-from-bracket',
-            disabled = (state.level or 1) > 1,
+            disabled = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.01),
             onSelect = function()
                 VRS.RemoveFromLift(shopId, liftIndex, vehicle)
             end,
@@ -245,7 +222,7 @@ function VRS.PlaceOnLift(shopId, liftIndex)
     if not lift then return end
 
     local plate = VRS.GetPlate(vehicle)
-    local coords, heading = getLiftWorldCoords(shopId, liftIndex, 1)
+    local coords, heading = VRS.GetLiftWorldCoords(shopId, liftIndex, Config.Lift.MinHeight or 0.0)
     if not coords then return end
 
     local driver = GetPedInVehicleSeat(vehicle, -1)
@@ -274,7 +251,7 @@ function VRS.PlaceOnLift(shopId, liftIndex)
         return
     end
 
-    applyLiftState(shopId, liftIndex, result.state)
+    VRS.ApplyLiftState(shopId, liftIndex, result.state)
     lib.notify({ title = 'Elevador', description = 'Veículo posicionado e pronto para serviço.', type = 'success' })
     Wait(150)
     VRS.OpenLiftMenu(shopId, liftIndex)
@@ -307,9 +284,9 @@ function VRS.RemoveFromLift(shopId, liftIndex, vehicle)
     SetEntityCoords(vehicle, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)
     SetEntityHeading(vehicle, lift.coords.w or GetEntityHeading(vehicle))
 
-    local liftKey = getLiftKey(shopId, liftIndex)
+    local liftKey = VRS.GetLiftKey(shopId, liftIndex)
     if VRS.LiftState then
-        VRS.LiftState[liftKey] = { level = 1, vehicleNetId = nil }
+        VRS.LiftState[liftKey] = { height = Config.Lift.MinHeight or 0.0, vehicleNetId = nil }
     end
     VRS.OnLift[liftKey] = nil
 
@@ -363,10 +340,13 @@ function VRS.RepairTyre(vehicle, tyreIndex, shopId)
         return
     end
 
-    VRS.PlayAnimation('repair_wheel')
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', 'tyre', { tyreIndex = tyreIndex })
+    if not serviceState then return end
+
+    VRS.PlayAnimation(serviceState.context.animationSet or 'repair_wheel')
 
     local success = lib.progressBar({
-        duration = 8000,
+        duration = serviceState.context.duration or 8000,
         label = 'Trocando pneu...',
         useWhileDead = false,
         canCancel = true,
@@ -374,6 +354,7 @@ function VRS.RepairTyre(vehicle, tyreIndex, shopId)
     })
 
     VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
 
     if not success then
         lib.notify({ title = 'Cancelado', description = VRS.L.repair.failed, type = 'error' })

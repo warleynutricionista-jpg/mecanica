@@ -19,6 +19,13 @@ function VRS.QuickDiagnostic(vehicle)
         return
     end
 
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, nil, 'diagnostic', 'quick')
+    if not serviceState then return end
+
+    VRS.PlayAnimation('diagnostic')
+    Wait(1000)
+    VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
     VRS.ShowDiagnosticMenu(vehicle, plate, status, false)
 end
 
@@ -34,11 +41,13 @@ function VRS.FullDiagnostic(vehicle, shopId)
     local plate = VRS.GetPlate(vehicle)
     if not plate then return end
 
-    -- Animação de inspeção
-    VRS.PlayAnimation('inspect')
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'diagnostic', 'full')
+    if not serviceState then return end
+
+    VRS.PlayAnimation('diagnostic')
 
     local success = lib.progressBar({
-        duration = 3000,
+        duration = (serviceState and serviceState.context and serviceState.context.duration) or 3000,
         label = 'Inspecionando veículo...',
         useWhileDead = false,
         canCancel = true,
@@ -46,6 +55,7 @@ function VRS.FullDiagnostic(vehicle, shopId)
     })
 
     VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
 
     if not success then
         lib.notify({ title = 'Cancelado', description = VRS.L.repair.failed, type = 'error' })

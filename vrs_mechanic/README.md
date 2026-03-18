@@ -23,15 +23,21 @@ O `vrs_mechanic` entrega:
 
 - `fxmanifest.lua`
 - `config/shared.lua`
+- `config/lift.lua`
 - `config/shops.lua`
 - `config/items.lua`
+- `config/services.lua`
 - `config/panel.lua`
+- `client/lift.lua`
+- `client/vehicle_access.lua`
+- `client/service_positions.lua`
 - `client/tablet.lua`
 - `client/shop.lua`
 - `client/duty.lua`
 - `client/target.lua`
 - `server/shop.lua`
 - `server/lifts.lua`
+- `server/services.lua`
 - `sql/vrs_mechanic.sql`
 - `web/index.html`
 - `web/app.js`
@@ -387,15 +393,20 @@ Arquivos:
 - `client/duty.lua`
 - `server/lifts.lua`
 
-### Níveis do elevador
+### Controle fino do elevador
 
-Em `config/shared.lua`:
+Em `config/lift.lua`:
 
 ```lua
-Config.Lift.levels = {
-    { label = 'Base', zOffset = 0.0 },
-    { label = 'Serviço', zOffset = 0.85 },
-    { label = 'Alta', zOffset = 1.35 },
+Config.Lift.MinHeight = 0.0
+Config.Lift.MaxHeight = 1.35
+Config.Lift.StepHeight = 0.15
+Config.Lift.AllowManualArrowControl = true
+Config.Lift.DefaultWorkHeights = {
+    engine = 0.45,
+    wheel = 0.55,
+    underbody = 1.15,
+    reset = 0.0,
 }
 ```
 
@@ -404,6 +415,8 @@ Config.Lift.levels = {
 - colocar no elevador;
 - subir;
 - descer;
+- ajuste manual com seta para cima / seta para baixo;
+- presets de altura para motor / roda / parte inferior;
 - retirar do elevador;
 - diagnosticar no elevador;
 - iniciar serviço no elevador.

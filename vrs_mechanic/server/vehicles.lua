@@ -76,6 +76,9 @@ RegisterNetEvent('vrs_mechanic:server:setupVehicleStatus', function(plate, engin
     local src = source
     if not plate or plate == '' then return end
 
+    local valid = VRS.ValidateVehicleContext(src, plate, nil, nil)
+    if not valid then return end
+
     local status = getVehicleStatus(plate)
 
     -- Se é primeira vez, sincronizar com valores nativos do GTA
@@ -91,10 +94,13 @@ RegisterNetEvent('vrs_mechanic:server:setupVehicleStatus', function(plate, engin
 end)
 
 -- Evento: atualizar uma parte específica
-RegisterNetEvent('vrs_mechanic:server:updatePart', function(plate, part, value)
+RegisterNetEvent('vrs_mechanic:server:updatePart', function(plate, part, value, netId)
     local src = source
     if not plate or not part or not value then return end
     if not VRS.IsValidPart(part) then return end
+
+    local valid = VRS.ValidateVehicleContext(src, plate, netId, 12.0)
+    if not valid then return end
 
     local status = getVehicleStatus(plate)
     local max = Config.MaxStatus[part] or 100
@@ -105,9 +111,12 @@ RegisterNetEvent('vrs_mechanic:server:updatePart', function(plate, part, value)
 end)
 
 -- Evento: atualizar múltiplas partes
-RegisterNetEvent('vrs_mechanic:server:updateMultipleParts', function(plate, updates)
+RegisterNetEvent('vrs_mechanic:server:updateMultipleParts', function(plate, updates, netId)
     local src = source
     if not plate or not updates then return end
+
+    local valid = VRS.ValidateVehicleContext(src, plate, netId, 12.0)
+    if not valid then return end
 
     local status = getVehicleStatus(plate)
     for part, value in pairs(updates) do
@@ -141,9 +150,6 @@ CreateThread(function()
             saveStatusToDB(plate, status)
             count = count + 1
         end
-        if count > 0 then
-            print(('[vrs_mechanic] ^3Salvos %d status de veículos^0'):format(count))
-        end
     end
 end)
 
@@ -153,7 +159,6 @@ AddEventHandler('onResourceStop', function(resource)
     for plate, status in pairs(vehicleStatusCache) do
         saveStatusToDB(plate, status)
     end
-    print('[vrs_mechanic] ^3Todos os status salvos ao parar resource^0')
 end)
 
 -- ============================================================

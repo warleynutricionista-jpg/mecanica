@@ -18,6 +18,11 @@ lib.callback.register('vrs_mechanic:server:createWorkOrder', function(source, da
         return { success = false, reason = 'no_access' }
     end
 
+    local shop = Config.Shops[data.shopId]
+    if shop and shop.type == 'owned' and not VRS.IsOnDuty(src) then
+        return { success = false, reason = 'not_on_duty' }
+    end
+
     local player = VRS.GetPlayerData(src)
     if not player then return { success = false, reason = 'no_player' } end
 
@@ -63,7 +68,7 @@ lib.callback.register('vrs_mechanic:server:getWorkOrders', function(source, shop
 
     local query, params
 
-    if statusFilter then
+    if statusFilter and statusFilter ~= '' then
         query = [[SELECT * FROM vrs_mechanic_work_orders
                   WHERE shop_id = ? AND status = ?
                   ORDER BY created_at DESC LIMIT 50]]
@@ -90,6 +95,7 @@ end)
 
 -- Obter OS específica
 lib.callback.register('vrs_mechanic:server:getWorkOrder', function(source, orderId)
+    local src = source
     local result = MySQL.query.await(
         'SELECT * FROM vrs_mechanic_work_orders WHERE id = ?',
         { orderId }
@@ -97,6 +103,7 @@ lib.callback.register('vrs_mechanic:server:getWorkOrder', function(source, order
     if not result or not result[1] then return nil end
 
     local order = result[1]
+    if not VRS.HasShopAccess(src, order.shop_id) then return nil end
     order.problems = order.problems and json.decode(order.problems) or {}
     order.materials = order.materials and json.decode(order.materials) or {}
     return order
@@ -181,15 +188,15 @@ lib.callback.register('vrs_mechanic:server:updateWorkOrder', function(source, or
         setClauses[#setClauses + 1] = 'materials = ?'
         params[#params + 1] = json.encode(updates.materials)
     end
-    if updates.budget then
+    if updates.budget ~= nil then
         setClauses[#setClauses + 1] = 'budget = ?'
         params[#params + 1] = updates.budget
     end
-    if updates.notes then
+    if updates.notes ~= nil then
         setClauses[#setClauses + 1] = 'notes = ?'
         params[#params + 1] = updates.notes
     end
-    if updates.status then
+    if updates.status ~= nil then
         setClauses[#setClauses + 1] = 'status = ?'
         params[#params + 1] = updates.status
     end

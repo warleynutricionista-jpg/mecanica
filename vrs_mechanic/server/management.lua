@@ -17,7 +17,7 @@ lib.callback.register('vrs_mechanic:server:getEmployees', function(source, shopI
 
     local results = MySQL.query.await(
         [[SELECT e.citizenid, e.grade, e.hired_at,
-                 CONCAT(p.charinfo) as charinfo
+                 p.charinfo
           FROM vrs_mechanic_employees e
           LEFT JOIN players p ON p.citizenid = e.citizenid
           WHERE e.shop_id = ?
@@ -146,10 +146,12 @@ end)
 
 -- Callback: obter preços customizados
 lib.callback.register('vrs_mechanic:server:getShopPrices', function(source, shopId)
+    local src = source
     if not shopId then return {} end
 
     local shop = Config.Shops[shopId]
     if not shop then return {} end
+    if shop.type == 'owned' and not VRS.HasShopAccess(src, shopId) then return {} end
 
     -- Carregar overrides do banco
     local overrides = MySQL.query.await(

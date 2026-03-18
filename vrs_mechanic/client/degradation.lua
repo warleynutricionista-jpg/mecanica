@@ -56,7 +56,7 @@ CreateThread(function()
                                     end
 
                                     if next(updates) then
-                                        TriggerServerEvent('vrs_mechanic:server:updateMultipleParts', plate, updates)
+                                        TriggerServerEvent('vrs_mechanic:server:updateMultipleParts', plate, updates, NetworkGetNetworkIdFromEntity(vehicle))
                                     end
 
                                     totalDistance = 0.0
@@ -121,7 +121,7 @@ CreateThread(function()
                         end
 
                         if next(updates) then
-                            TriggerServerEvent('vrs_mechanic:server:updateMultipleParts', plate, updates)
+                            TriggerServerEvent('vrs_mechanic:server:updateMultipleParts', plate, updates, NetworkGetNetworkIdFromEntity(vehicle))
                         end
                     end
                 end
@@ -181,7 +181,7 @@ CreateThread(function()
                     local engineDamage = Config.OilSystem.engineDamageRate
                     local newEngine = (status.engine or Config.MaxStatus.engine) - engineDamage
                     if newEngine < 0 then newEngine = 0 end
-                    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, 'engine', newEngine)
+                    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, 'engine', newEngine, NetworkGetNetworkIdFromEntity(vehicle))
                 end
 
                 -- Radiador ruim: superaquecimento
@@ -196,7 +196,7 @@ CreateThread(function()
                     local engineDamage = Config.Degradation.radiatorEngineDamageRate
                     local newEngine = (status.engine or Config.MaxStatus.engine) - engineDamage
                     if newEngine < 0 then newEngine = 0 end
-                    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, 'engine', newEngine)
+                    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, 'engine', newEngine, NetworkGetNetworkIdFromEntity(vehicle))
                 end
             end
         end

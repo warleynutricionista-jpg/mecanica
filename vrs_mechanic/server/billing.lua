@@ -31,8 +31,13 @@ lib.callback.register('vrs_mechanic:server:sendBill', function(source, data)
     -- Validar acesso
     if shopId and Config.Shops[shopId] then
         local shop = Config.Shops[shopId]
-        if shop.type == 'owned' and not VRS.HasShopAccess(src, shopId) then
-            return { success = false, reason = 'no_access' }
+        if shop.type == 'owned' then
+            if not VRS.HasShopAccess(src, shopId) then
+                return { success = false, reason = 'no_access' }
+            end
+            if not VRS.IsOnDuty(src) then
+                return { success = false, reason = 'not_on_duty' }
+            end
         end
     end
 

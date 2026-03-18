@@ -43,17 +43,30 @@ end
 ---@return boolean
 function VRS.IsManager(source, shopId)
     local shop = Config.Shops[shopId]
-    if not shop or not shop.managementGrades then return false end
+    if not shop then return false end
 
     local player = exports.qbx_core:GetPlayer(source)
     if not player then return false end
-    if player.PlayerData.job.name ~= shop.job then return false end
+    if shop.job and player.PlayerData.job.name ~= shop.job then return false end
 
-    local grade = player.PlayerData.job.grade.level
-    for _, g in ipairs(shop.managementGrades) do
-        if grade == g then return true end
+    local grade = player.PlayerData.job.grade.level or 0
+    local minManagementGrade = 999
+
+    for _, g in ipairs(shop.managementGrades or Config.PanelAccess.managementGrades or {}) do
+        if g < minManagementGrade then
+            minManagementGrade = g
+        end
     end
-    return false
+
+    if minManagementGrade == 999 then
+        minManagementGrade = 0
+    end
+
+    if VRS.IsBoss and VRS.IsBoss(source, shopId) then
+        return true
+    end
+
+    return grade >= minManagementGrade
 end
 
 --- Retorna dados do jogador
@@ -95,6 +108,44 @@ function VRS.ValidateDistance(source, entity, maxDistance)
     local entityCoords = GetEntityCoords(entity)
 
     return #(playerCoords - entityCoords) <= maxDistance
+end
+
+
+--- Valida se o veículo informado realmente pertence ao contexto do jogador
+---@param source number
+---@param plate string|nil
+---@param netId number|nil
+---@param maxDistance number|nil
+---@return boolean, number|nil, string|nil
+function VRS.ValidateVehicleContext(source, plate, netId, maxDistance)
+    local playerPed = GetPlayerPed(source)
+    if not playerPed or playerPed == 0 then
+        return false, nil, 'no_player'
+    end
+
+    local vehicle = nil
+
+    if netId then
+        vehicle = NetworkGetEntityFromNetworkId(netId)
+        if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+            return false, nil, 'invalid_vehicle'
+        end
+
+        if maxDistance and not VRS.ValidateDistance(source, vehicle, maxDistance) then
+            return false, nil, 'too_far'
+        end
+    else
+        vehicle = GetVehiclePedIsIn(playerPed, false)
+        if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+            return false, nil, 'invalid_vehicle'
+        end
+    end
+
+    if plate and VRS.GetPlate(vehicle) ~= plate then
+        return false, nil, 'plate_mismatch'
+    end
+
+    return true, vehicle, nil
 end
 
 -- Limpar cooldowns quando jogador sai

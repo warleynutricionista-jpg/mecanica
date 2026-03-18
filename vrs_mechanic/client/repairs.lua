@@ -194,7 +194,7 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
                 local matNames = {}
                 for _, m in ipairs(mats) do
                     if m.amount > 0 then
-                        matNames[#matNames + 1] = ('%dx %s'):format(m.amount, m.item)
+                        matNames[#matNames + 1] = ('%dx %s'):format(m.amount, VRS.GetItemLabel(m.item))
                     end
                 end
                 matsText = table.concat(matNames, ', ')
@@ -342,6 +342,7 @@ function VRS.DoOilChange(vehicle, plate, shopId)
     local result = lib.callback.await('vrs_mechanic:server:changeOil', false, {
         plate = plate,
         shopId = shopId,
+        netId = NetworkGetNetworkIdFromEntity(vehicle),
     })
 
     if result and result.success then

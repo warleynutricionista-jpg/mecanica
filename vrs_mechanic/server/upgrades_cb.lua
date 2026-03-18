@@ -13,6 +13,7 @@ lib.callback.register('vrs_mechanic:server:installUpgrade', function(source, dat
     local plate = data.plate
     local upgradeType = data.upgradeType
     local shopId = data.shopId
+    local netId = data.netId
 
     if not plate or not upgradeType then
         return { success = false, reason = 'invalid_data' }
@@ -31,6 +32,11 @@ lib.callback.register('vrs_mechanic:server:installUpgrade', function(source, dat
 
     if Config.Upgrades.requireDuty and not VRS.IsOnDuty(src) then
         return { success = false, reason = 'not_on_duty' }
+    end
+
+    local validVehicle, _, vehicleReason = VRS.ValidateVehicleContext(src, plate, netId, 10.0)
+    if not validVehicle then
+        return { success = false, reason = vehicleReason or 'invalid_vehicle' }
     end
 
     -- Verificar e consumir materiais

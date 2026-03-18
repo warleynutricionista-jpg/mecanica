@@ -3,158 +3,185 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VRS Mechanic - Tablet</title>
+    <title>VRS Mechanic Tablet</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div id="tablet" class="hidden">
-        <div class="tablet-frame">
-            <div class="tablet-header">
-                <div class="header-left">
-                    <i class="fas fa-wrench"></i>
-                    <span id="shop-name">Mecânica Central</span>
-                </div>
-                <div class="header-right">
-                    <span id="player-name"></span>
-                    <button class="btn-icon" onclick="closeTablet()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="tablet-nav">
-                <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
-                    <i class="fas fa-home"></i> Painel
-                </button>
-                <button class="nav-btn" data-tab="orders" onclick="switchTab('orders')">
-                    <i class="fas fa-clipboard-list"></i> Ordens de Serviço
-                </button>
-                <button class="nav-btn" data-tab="employees" onclick="switchTab('employees')">
-                    <i class="fas fa-users"></i> Funcionários
-                </button>
-                <button class="nav-btn" data-tab="pricing" onclick="switchTab('pricing')">
-                    <i class="fas fa-tags"></i> Preços
-                </button>
-                <button class="nav-btn" data-tab="billing" onclick="switchTab('billing')">
-                    <i class="fas fa-file-invoice-dollar"></i> Cobrança
-                </button>
-                <button class="nav-btn" data-tab="logs" onclick="switchTab('logs')">
-                    <i class="fas fa-history"></i> Histórico
-                </button>
-            </div>
-
-            <div class="tablet-content">
-                <!-- DASHBOARD -->
-                <div id="tab-dashboard" class="tab-panel active">
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon"><i class="fas fa-clipboard-list"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-value" id="stat-total-orders">0</span>
-                                <span class="stat-label">Total de OS</span>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-value" id="stat-completed">0</span>
-                                <span class="stat-label">OS Concluídas</span>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon warning"><i class="fas fa-dollar-sign"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-value" id="stat-revenue">R$ 0</span>
-                                <span class="stat-label">Faturamento</span>
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon info"><i class="fas fa-users"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-value" id="stat-employees">0</span>
-                                <span class="stat-label">Funcionários</span>
-                            </div>
-                        </div>
+        <div class="tablet-shell">
+            <aside class="sidebar">
+                <div class="brand">
+                    <div class="brand-mark">🔧</div>
+                    <div>
+                        <strong id="shop-name">Oficina</strong>
+                        <p id="shop-mode">Painel operacional</p>
                     </div>
                 </div>
 
-                <!-- ORDENS DE SERVIÇO -->
-                <div id="tab-orders" class="tab-panel">
-                    <div class="tab-toolbar">
-                        <select id="order-filter" onchange="loadOrders()">
+                <nav class="nav-list">
+                    <button class="nav-btn active" data-tab="dashboard"><span>🏠</span><span>Painel</span></button>
+                    <button class="nav-btn" data-tab="orders"><span>📋</span><span>Ordens de serviço</span></button>
+                    <button class="nav-btn" data-tab="shop"><span>🛒</span><span>Loja e estoque</span></button>
+                    <button class="nav-btn" data-tab="employees"><span>👥</span><span>Funcionários</span></button>
+                    <button class="nav-btn" data-tab="pricing"><span>💲</span><span>Preços</span></button>
+                    <button class="nav-btn" data-tab="billing"><span>🧾</span><span>Cobrança</span></button>
+                    <button class="nav-btn" data-tab="logs"><span>🕘</span><span>Histórico</span></button>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="profile-card">
+                        <span class="profile-tag">Operador</span>
+                        <strong id="player-name">Carregando...</strong>
+                        <small id="player-role">Aguardando dados</small>
+                    </div>
+                    <button id="close-btn" class="secondary-btn danger">Fechar tablet</button>
+                </div>
+            </aside>
+
+            <main class="content">
+                <header class="content-header">
+                    <div>
+                        <p class="eyebrow">Tablet da mecânica</p>
+                        <h1 id="tab-title">Painel da oficina</h1>
+                    </div>
+                    <div class="header-actions">
+                        <button id="refresh-btn" class="secondary-btn">Atualizar dados</button>
+                    </div>
+                </header>
+
+                <section id="tab-dashboard" class="tab-panel active">
+                    <div class="stats-grid">
+                        <article class="stat-card">
+                            <span class="stat-icon">📋</span>
+                            <div>
+                                <strong id="stat-total-orders">0</strong>
+                                <p>Total de ordens</p>
+                            </div>
+                        </article>
+                        <article class="stat-card">
+                            <span class="stat-icon">✅</span>
+                            <div>
+                                <strong id="stat-completed">0</strong>
+                                <p>Ordens concluídas</p>
+                            </div>
+                        </article>
+                        <article class="stat-card">
+                            <span class="stat-icon">💰</span>
+                            <div>
+                                <strong id="stat-revenue">R$ 0</strong>
+                                <p>Faturamento</p>
+                            </div>
+                        </article>
+                        <article class="stat-card">
+                            <span class="stat-icon">👥</span>
+                            <div>
+                                <strong id="stat-employees">0</strong>
+                                <p>Funcionários</p>
+                            </div>
+                        </article>
+                    </div>
+
+                    <div class="panel-grid two-columns">
+                        <section class="panel-card">
+                            <div class="section-header">
+                                <h2>Resumo operacional</h2>
+                            </div>
+                            <div id="dashboard-summary" class="summary-list"></div>
+                        </section>
+
+                        <section class="panel-card">
+                            <div class="section-header">
+                                <h2>Atalhos</h2>
+                            </div>
+                            <div class="shortcut-grid">
+                                <button class="shortcut-btn" data-open-tab="orders">Abrir OS</button>
+                                <button class="shortcut-btn" data-open-tab="shop">Abrir loja</button>
+                                <button class="shortcut-btn" data-open-tab="billing">Cobrar cliente</button>
+                                <button class="shortcut-btn" data-open-tab="logs">Ver histórico</button>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+
+                <section id="tab-orders" class="tab-panel">
+                    <div class="section-header">
+                        <h2>Ordens de serviço</h2>
+                        <select id="order-filter" class="field compact">
                             <option value="">Todas</option>
                             <option value="open">Abertas</option>
-                            <option value="progress">Em Andamento</option>
-                            <option value="waiting">Aguardando Peça</option>
+                            <option value="progress">Em andamento</option>
+                            <option value="waiting">Aguardando peça</option>
                             <option value="done">Concluídas</option>
                             <option value="delivered">Entregues</option>
                         </select>
-                        <button class="btn btn-refresh" onclick="loadOrders()">
-                            <i class="fas fa-sync-alt"></i> Atualizar
-                        </button>
                     </div>
-                    <div id="orders-list" class="list-container">
-                        <p class="empty-msg">Nenhuma ordem de serviço.</p>
-                    </div>
-                </div>
+                    <div id="orders-list" class="stack-list"></div>
+                </section>
 
-                <!-- FUNCIONÁRIOS -->
-                <div id="tab-employees" class="tab-panel">
-                    <div class="tab-toolbar">
-                        <button class="btn btn-primary" onclick="loadEmployees()">
-                            <i class="fas fa-sync-alt"></i> Atualizar
-                        </button>
-                    </div>
-                    <div id="employees-list" class="list-container">
-                        <p class="empty-msg">Nenhum funcionário cadastrado.</p>
-                    </div>
-                </div>
-
-                <!-- PREÇOS -->
-                <div id="tab-pricing" class="tab-panel">
-                    <div id="pricing-list" class="list-container">
-                        <p class="empty-msg">Carregando preços...</p>
-                    </div>
-                </div>
-
-                <!-- COBRANÇA -->
-                <div id="tab-billing" class="tab-panel">
-                    <div class="billing-form">
-                        <h3>Enviar Cobrança</h3>
-                        <div class="form-group">
-                            <label>Jogador</label>
-                            <select id="billing-target"></select>
-                            <button class="btn btn-sm" onclick="loadNearbyPlayers()">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
+                <section id="tab-shop" class="tab-panel">
+                    <div class="section-header">
+                        <div>
+                            <h2>Loja de peças e estoque</h2>
+                            <p class="muted" id="shop-summary-text">Catálogo pronto para compra operacional.</p>
                         </div>
-                        <div class="form-group">
-                            <label>Valor (R$)</label>
-                            <input type="number" id="billing-amount" min="100" step="100" placeholder="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Descrição</label>
-                            <input type="text" id="billing-desc" placeholder="Serviço mecânico">
-                        </div>
-                        <button class="btn btn-primary" onclick="sendBill()">
-                            <i class="fas fa-paper-plane"></i> Enviar Cobrança
-                        </button>
+                        <button id="shop-open-btn" class="primary-btn">Abrir terminal de compras</button>
                     </div>
-                </div>
+                    <div id="shop-categories" class="shop-grid"></div>
+                    <div id="shop-items-preview" class="stack-list compact"></div>
+                </section>
 
-                <!-- HISTÓRICO -->
-                <div id="tab-logs" class="tab-panel">
-                    <div class="tab-toolbar">
-                        <button class="btn btn-refresh" onclick="loadBillingHistory()">
-                            <i class="fas fa-sync-alt"></i> Atualizar
-                        </button>
+                <section id="tab-employees" class="tab-panel">
+                    <div class="section-header">
+                        <div>
+                            <h2>Funcionários</h2>
+                            <p class="muted">Gerencie equipe, acompanhe presença e contrate jogadores próximos.</p>
+                        </div>
                     </div>
-                    <div id="logs-list" class="list-container">
-                        <p class="empty-msg">Nenhum registro.</p>
+                    <div class="form-card compact-card">
+                        <label>Candidatos próximos</label>
+                        <div class="inline-field">
+                            <select id="employee-target" class="field"></select>
+                            <button id="hire-employee-btn" class="secondary-btn">Contratar</button>
+                        </div>
                     </div>
-                </div>
-            </div>
+                    <div id="employees-list" class="stack-list"></div>
+                </section>
+
+                <section id="tab-pricing" class="tab-panel">
+                    <div class="section-header">
+                        <h2>Tabela de preços</h2>
+                    </div>
+                    <div id="pricing-list" class="price-grid"></div>
+                </section>
+
+                <section id="tab-billing" class="tab-panel">
+                    <div class="section-header">
+                        <h2>Cobrança rápida</h2>
+                    </div>
+                    <div class="form-card">
+                        <label>Cliente próximo</label>
+                        <div class="inline-field">
+                            <select id="billing-target" class="field"></select>
+                            <button id="reload-players-btn" class="secondary-btn">Atualizar</button>
+                        </div>
+
+                        <label>Valor</label>
+                        <input id="billing-amount" class="field" type="number" min="100" step="50" placeholder="Informe o valor">
+
+                        <label>Descrição</label>
+                        <input id="billing-desc" class="field" type="text" placeholder="Ex.: revisão completa, troca de óleo, alinhamento">
+
+                        <button id="send-bill-btn" class="primary-btn full">Enviar cobrança</button>
+                    </div>
+                </section>
+
+                <section id="tab-logs" class="tab-panel">
+                    <div class="section-header">
+                        <h2>Histórico financeiro</h2>
+                    </div>
+                    <div id="logs-list" class="stack-list"></div>
+                </section>
+            </main>
         </div>
     </div>
 

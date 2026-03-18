@@ -53,6 +53,12 @@ Config.Shops = {
             tablet = vec3(-322.00, -127.00, 39.00),
         },
 
+        partsShop = {
+            public = false,
+            jobOnly = true,
+            allowTabletAccess = true,
+        },
+
         -- Stash de oficina
         stash = {
             slots = 50,
@@ -124,6 +130,13 @@ Config.Shops = {
             duty = vec3(1182.0, 2645.0, 37.75),
             stash = vec3(1180.0, 2638.0, 37.75),
             shop = vec3(1178.0, 2643.0, 37.75),
+            tablet = vec3(1181.2, 2641.8, 37.75),
+        },
+
+        partsShop = {
+            public = false,
+            jobOnly = true,
+            allowTabletAccess = true,
         },
 
         stash = {
@@ -189,7 +202,15 @@ Config.Shops = {
             },
         },
 
-        locations = {},
+        locations = {
+            shop = vec3(537.0, -183.0, 54.5),
+        },
+
+        partsShop = {
+            public = true,
+            jobOnly = false,
+            allowTabletAccess = false,
+        },
 
         stash = nil, -- sem stash em self-service
 

@@ -5,7 +5,7 @@ lua54 'yes'
 name 'vrs_mechanic'
 author 'VRS Development'
 description 'Sistema completo de mecânica para Qbox/QBX'
-version '1.0.0'
+version '1.1.0'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -16,13 +16,18 @@ shared_scripts {
 client_scripts {
     '@qbx_core/modules/playerdata.lua',
     'config/shared.lua',
+    'config/lift.lua',
     'config/shops.lua',
     'config/items.lua',
+    'config/services.lua',
     'config/panel.lua',
     'shared/constants.lua',
     'shared/utils.lua',
     'shared/vehicle.lua',
     'client/main.lua',
+    'client/lift.lua',
+    'client/vehicle_access.lua',
+    'client/service_positions.lua',
     'client/zones.lua',
     'client/target.lua',
     'client/diagnostics.lua',
@@ -30,6 +35,7 @@ client_scripts {
     'client/upgrades.lua',
     'client/duty.lua',
     'client/tablet.lua',
+    'client/shop.lua',
     'client/animations.lua',
     'client/degradation.lua',
     'client/hub.lua',
@@ -38,13 +44,16 @@ client_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'config/shared.lua',
+    'config/lift.lua',
     'config/shops.lua',
     'config/items.lua',
+    'config/services.lua',
     'config/panel.lua',
     'shared/constants.lua',
     'shared/utils.lua',
     'shared/vehicle.lua',
     'server/main.lua',
+    'server/services.lua',
     'server/panel_access.lua',
     'server/vehicles.lua',
     'server/repairs.lua',
@@ -53,6 +62,8 @@ server_scripts {
     'server/billing.lua',
     'server/management.lua',
     'server/stashes.lua',
+    'server/shop.lua',
+    'server/lifts.lua',
     'server/upgrades_cb.lua',
     'server/logging.lua',
 }

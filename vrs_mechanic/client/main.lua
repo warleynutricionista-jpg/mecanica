@@ -12,6 +12,7 @@ VRS.VehicleStatus = {}
 VRS.CurrentShop = nil   -- shopId da oficina atual
 VRS.InShopZone = false
 VRS.OnLift = {}         -- { [liftIndex] = netId }
+VRS.LiftState = {}
 
 -- ============================================================
 -- SYNC DE STATUS
@@ -214,7 +215,7 @@ exports('GetVehicleStatus', function(plate, part)
 end)
 
 exports('SetVehicleStatus', function(plate, part, level)
-    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, part, level)
+    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, part, level, cache.vehicle and NetworkGetNetworkIdFromEntity(cache.vehicle) or nil)
 end)
 
 print('[vrs_mechanic] ^2Cliente iniciado^0')

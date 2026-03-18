@@ -5,15 +5,11 @@
 local liftTargets = {}
 local locationTargets = {}
 
---- Cria targets para elevadores
----@param shopId string
----@param shop table
 local function createLiftTargets(shopId, shop)
     if not shop.lifts then return end
 
     for i, lift in ipairs(shop.lifts) do
         local liftId = ('vrs_lift_%s_%d'):format(shopId, i)
-
         liftTargets[liftId] = exports.ox_target:addBoxZone({
             coords = vec3(lift.coords.x, lift.coords.y, lift.coords.z),
             size = vec3(lift.width or 2.5, lift.length or 5.0, 2.0),
@@ -23,7 +19,7 @@ local function createLiftTargets(shopId, shop)
                 {
                     name = liftId .. '_menu',
                     icon = 'fas fa-car-side',
-                    label = VRS.L.shop.lift_place,
+                    label = 'Elevador e serviços',
                     distance = 3.0,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
@@ -34,13 +30,9 @@ local function createLiftTargets(shopId, shop)
     end
 end
 
---- Cria targets para pontos de interação
----@param shopId string
----@param shop table
 local function createLocationTargets(shopId, shop)
     if not shop.locations then return end
 
-    -- Duty point
     if shop.locations.duty then
         local dutyId = ('vrs_duty_%s'):format(shopId)
         locationTargets[dutyId] = exports.ox_target:addBoxZone({
@@ -63,7 +55,6 @@ local function createLocationTargets(shopId, shop)
         })
     end
 
-    -- Stash point
     if shop.locations.stash and shop.stash then
         local stashId = ('vrs_stash_%s'):format(shopId)
         locationTargets[stashId] = exports.ox_target:addBoxZone({
@@ -86,23 +77,43 @@ local function createLocationTargets(shopId, shop)
         })
     end
 
-    -- Shop/store point
     if shop.locations.shop then
         local shopPointId = ('vrs_shop_%s'):format(shopId)
         locationTargets[shopPointId] = exports.ox_target:addBoxZone({
             coords = shop.locations.shop,
-            size = vec3(1.5, 1.5, 2.0),
+            size = vec3(1.8, 1.8, 2.0),
             rotation = 0.0,
             debug = false,
             options = {
                 {
                     name = shopPointId,
                     icon = 'fas fa-store',
-                    label = 'Loja de Peças',
+                    label = 'Abrir loja de peças',
                     distance = 2.0,
                     onSelect = function()
-                        -- Extensão futura: abrir loja de peças
-                        lib.notify({ title = 'Loja', description = 'Em breve!', type = 'inform' })
+                        VRS.OpenPartsShop(shopId)
+                    end,
+                },
+            },
+        })
+    end
+
+    if shop.locations.tablet then
+        local tabletId = ('vrs_tablet_%s'):format(shopId)
+        locationTargets[tabletId] = exports.ox_target:addBoxZone({
+            coords = shop.locations.tablet,
+            size = vec3(1.5, 1.5, 2.0),
+            rotation = 0.0,
+            debug = false,
+            options = {
+                {
+                    name = tabletId,
+                    icon = 'fas fa-tablet-alt',
+                    label = 'Abrir tablet da oficina',
+                    distance = 2.0,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    onSelect = function()
+                        VRS.OpenTablet(shopId)
                     end,
                 },
             },
@@ -110,13 +121,12 @@ local function createLocationTargets(shopId, shop)
     end
 end
 
---- Target para veículos: diagnóstico rápido e reparo de rua
 local function createVehicleTargets()
     exports.ox_target:addGlobalVehicle({
         {
             name = 'vrs_vehicle_diagnose',
             icon = 'fas fa-stethoscope',
-            label = 'Verificar Veículo',
+            label = 'Verificar veículo',
             distance = 3.0,
             bones = { 'bonnet' },
             onSelect = function(data)
@@ -140,10 +150,6 @@ local function createVehicleTargets()
     })
 end
 
--- ============================================================
--- INICIALIZAÇÃO
--- ============================================================
-
 CreateThread(function()
     for shopId, shop in pairs(Config.Shops) do
         createLiftTargets(shopId, shop)
@@ -153,14 +159,13 @@ CreateThread(function()
     createVehicleTargets()
 end)
 
--- Limpar ao parar
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
 
-    for id, _ in pairs(liftTargets) do
+    for id in pairs(liftTargets) do
         exports.ox_target:removeZone(id)
     end
-    for id, _ in pairs(locationTargets) do
+    for id in pairs(locationTargets) do
         exports.ox_target:removeZone(id)
     end
 end)

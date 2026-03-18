@@ -103,6 +103,11 @@ local function canOpenHub()
         return false, 'blocked_invalid_state'
     end
 
+    -- Outro foco NUI ativo
+    if Config.Panel.blockOnNuiFocus and IsNuiFocused() then
+        return false, 'blocked_busy'
+    end
+
     -- Cooldown
     local now = GetGameTimer()
     if (now - HubState.lastOpenTime) < Config.Panel.openCooldown then
@@ -551,9 +556,10 @@ function VRS.OpenQuickServicesMenu(vehicle, shopId)
     -- Troca de pneu
     options[#options + 1] = {
         title = L.quick_tyre,
-        description = L.quick_tyre_desc,
+        description = shopId and L.quick_tyre_desc or VRS.L.hub.blocked_no_shop,
         icon = 'fas fa-circle',
         iconColor = '#424242',
+        disabled = not shopId,
         onSelect = function()
             if shopId then
                 VRS.OpenTyreMenu(vehicle, shopId)
@@ -848,19 +854,19 @@ local _origCloseTablet = VRS.CloseTablet
 
 -- Sobrescrever OpenTablet para rastrear estado no HubState
 local function hookTabletOpen(shopId)
-    HubState.tabletOpen = true
-    HubState.busy = true
     if _origOpenTablet then
         _origOpenTablet(shopId)
     end
+    HubState.tabletOpen = VRS.IsTabletOpen and VRS.IsTabletOpen() or false
+    HubState.busy = HubState.tabletOpen
 end
 
 local function hookTabletClose()
-    HubState.tabletOpen = false
-    HubState.busy = false
     if _origCloseTablet then
         _origCloseTablet()
     end
+    HubState.tabletOpen = false
+    HubState.busy = false
 end
 
 -- Aplicar hooks após o carregamento completo

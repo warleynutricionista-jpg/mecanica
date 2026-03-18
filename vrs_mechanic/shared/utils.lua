@@ -88,3 +88,15 @@ function VRS.TableContains(tbl, val)
     end
     return false
 end
+
+--- Retorna o label amigável de um item do inventário
+---@param itemName string
+---@return string
+function VRS.GetItemLabel(itemName)
+    if Config.PartsShop and Config.PartsShop.items and Config.PartsShop.items[itemName] and Config.PartsShop.items[itemName].label then
+        return Config.PartsShop.items[itemName].label
+    end
+
+    return itemName
+end
+

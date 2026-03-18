@@ -39,12 +39,14 @@ function VRS.OpenStreetRepairMenu(vehicle)
         else
             -- Verificar materiais
             local hasMats = lib.callback.await('vrs_mechanic:server:checkMaterials', false, part, true)
+            local context = VRS.GetServiceContext('repair', part)
 
             options[#options + 1] = {
                 title = label,
-                description = ('Atual: %d%% → até %d%% %s'):format(
+                description = ('Atual: %d%% → até %d%%%s%s'):format(
                     pct, maxPct,
-                    not hasMats and '| SEM MATERIAIS' or ''
+                    context and (' | Área: %s'):format(context.serviceArea or 'geral') or '',
+                    not hasMats and ' | SEM MATERIAIS' or ''
                 ),
                 icon = 'fas fa-wrench',
                 iconColor = hasMats and '#4CAF50' or '#F44336',
@@ -71,20 +73,24 @@ end
 ---@param plate string
 ---@param part string
 function VRS.DoStreetRepair(vehicle, plate, part)
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, nil, 'repair', part)
+    if not serviceState then return end
+
     -- Skill check
     if Config.StreetRepair.skillCheck then
         local success = lib.skillCheck(Config.StreetRepair.skillCheck)
         if not success then
+            VRS.FinishContextualVehicleService(vehicle, serviceState)
             lib.notify({ title = 'Falha', description = VRS.L.repair.skill_failed, type = 'error' })
             return
         end
     end
 
     -- Animação
-    VRS.PlayAnimation('repair')
+    VRS.PlayAnimation(serviceState.context.animationSet or 'repair')
 
     local success = lib.progressBar({
-        duration = Config.StreetRepair.duration or 8000,
+        duration = serviceState.context.duration or Config.StreetRepair.duration or 8000,
         label = VRS.L.repair.repairing:format(VRS.GetPartLabel(part)),
         useWhileDead = false,
         canCancel = true,
@@ -92,6 +98,7 @@ function VRS.DoStreetRepair(vehicle, plate, part)
     })
 
     VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
 
     if not success then
         lib.notify({ title = 'Cancelado', description = VRS.L.repair.failed, type = 'error' })
@@ -129,6 +136,10 @@ function VRS.DoStreetRepair(vehicle, plate, part)
             lib.notify({ title = 'Erro', description = VRS.L.repair.no_items, type = 'error' })
         elseif reason == 'cooldown' then
             lib.notify({ title = 'Erro', description = VRS.L.repair.cooldown, type = 'error' })
+        elseif reason == 'lift_required' then
+            lib.notify({ title = 'Erro', description = 'Este reparo exige o veículo corretamente posicionado no elevador.', type = 'error' })
+        elseif reason == 'lift_too_low' then
+            lib.notify({ title = 'Erro', description = 'Este reparo exige o elevador acima da altura mínima.', type = 'error' })
         else
             lib.notify({ title = 'Erro', description = 'Erro no reparo.', type = 'error' })
         end
@@ -186,6 +197,7 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
         else
             -- Verificar materiais
             local hasMats = lib.callback.await('vrs_mechanic:server:checkMaterials', false, part, false)
+            local context = VRS.GetServiceContext('repair', part)
 
             -- Listar materiais necessários
             local matsText = ''
@@ -194,7 +206,7 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
                 local matNames = {}
                 for _, m in ipairs(mats) do
                     if m.amount > 0 then
-                        matNames[#matNames + 1] = ('%dx %s'):format(m.amount, m.item)
+                        matNames[#matNames + 1] = ('%dx %s'):format(m.amount, VRS.GetItemLabel(m.item))
                     end
                 end
                 matsText = table.concat(matNames, ', ')
@@ -205,10 +217,11 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
 
             options[#options + 1] = {
                 title = ('%s (%d%%)'):format(label, pct),
-                description = ('Preço: R$ %s | Materiais: %s %s'):format(
+                description = ('Preço: R$ %s | Materiais: %s%s%s'):format(
                     VRS.FormatMoney(price),
                     matsText,
-                    not hasMats and '| SEM MATERIAIS' or ''
+                    context and (' | Área: %s'):format(context.serviceArea or 'geral') or '',
+                    not hasMats and ' | SEM MATERIAIS' or ''
                 ),
                 icon = 'fas fa-tools',
                 iconColor = iconColor,
@@ -234,6 +247,20 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
         }
     end
 
+    if shop.services and shop.services.wash then
+        local hasCleaningKit = lib.callback.await('vrs_mechanic:server:hasItem', false, 'cleaning_kit', 1)
+        options[#options + 1] = {
+            title = 'Limpeza e acabamento',
+            description = ('Kit de limpeza%s'):format(not hasCleaningKit and ' | SEM ITEM' or ''),
+            icon = 'fas fa-soap',
+            iconColor = hasCleaningKit and '#4CAF50' or '#F44336',
+            disabled = not hasCleaningKit,
+            onSelect = function()
+                VRS.DoVehicleCleaning(vehicle, plate, shopId)
+            end,
+        }
+    end
+
     lib.registerContext({
         id = 'vrs_shop_repair',
         title = VRS.L.repair.shop_repair,
@@ -251,19 +278,23 @@ end
 ---@param part string
 ---@param shopId string
 function VRS.DoShopRepair(vehicle, plate, part, shopId)
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', part)
+    if not serviceState then return end
+
     -- Skill check
     if Config.ShopRepair.skillCheck then
         local success = lib.skillCheck(Config.ShopRepair.skillCheck)
         if not success then
+            VRS.FinishContextualVehicleService(vehicle, serviceState)
             lib.notify({ title = 'Falha', description = VRS.L.repair.skill_failed, type = 'error' })
             return
         end
     end
 
-    VRS.PlayAnimation('repair')
+    VRS.PlayAnimation(serviceState.context.animationSet or 'repair')
 
     local success = lib.progressBar({
-        duration = Config.ShopRepair.duration or 12000,
+        duration = serviceState.context.duration or Config.ShopRepair.duration or 12000,
         label = VRS.L.repair.repairing:format(VRS.GetPartLabel(part)),
         useWhileDead = false,
         canCancel = true,
@@ -271,6 +302,7 @@ function VRS.DoShopRepair(vehicle, plate, part, shopId)
     })
 
     VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
 
     if not success then
         lib.notify({ title = 'Cancelado', description = VRS.L.repair.failed, type = 'error' })
@@ -311,6 +343,10 @@ function VRS.DoShopRepair(vehicle, plate, part, shopId)
             lib.notify({ title = 'Erro', description = VRS.L.repair.not_on_duty, type = 'error' })
         elseif reason == 'no_access' then
             lib.notify({ title = 'Erro', description = VRS.L.repair.not_mechanic, type = 'error' })
+        elseif reason == 'lift_required' then
+            lib.notify({ title = 'Erro', description = 'Este reparo exige o veículo corretamente posicionado no elevador.', type = 'error' })
+        elseif reason == 'lift_too_low' then
+            lib.notify({ title = 'Erro', description = 'Elevador muito baixo para acessar este componente.', type = 'error' })
         else
             lib.notify({ title = 'Erro', description = 'Erro no reparo.', type = 'error' })
         end
@@ -322,10 +358,13 @@ end
 ---@param plate string
 ---@param shopId string
 function VRS.DoOilChange(vehicle, plate, shopId)
-    VRS.PlayAnimation('repair')
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', 'oil')
+    if not serviceState then return end
+
+    VRS.PlayAnimation(serviceState.context.animationSet or 'repair')
 
     local success = lib.progressBar({
-        duration = 6000,
+        duration = serviceState.context.duration or 6000,
         label = 'Trocando óleo...',
         useWhileDead = false,
         canCancel = true,
@@ -333,6 +372,7 @@ function VRS.DoOilChange(vehicle, plate, shopId)
     })
 
     VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
 
     if not success then
         lib.notify({ title = 'Cancelado', description = VRS.L.repair.failed, type = 'error' })
@@ -342,6 +382,7 @@ function VRS.DoOilChange(vehicle, plate, shopId)
     local result = lib.callback.await('vrs_mechanic:server:changeOil', false, {
         plate = plate,
         shopId = shopId,
+        netId = NetworkGetNetworkIdFromEntity(vehicle),
     })
 
     if result and result.success then
@@ -354,8 +395,46 @@ function VRS.DoOilChange(vehicle, plate, shopId)
         local reason = result and result.reason or 'unknown'
         if reason == 'no_materials' then
             lib.notify({ title = 'Erro', description = VRS.L.repair.no_items, type = 'error' })
+        elseif reason == 'lift_required' then
+            lib.notify({ title = 'Erro', description = 'A troca de óleo exige o veículo corretamente posicionado.', type = 'error' })
+        elseif reason == 'lift_too_low' then
+            lib.notify({ title = 'Erro', description = 'Elevador muito baixo para acessar a parte inferior necessária.', type = 'error' })
         else
             lib.notify({ title = 'Erro', description = 'Erro na troca de óleo.', type = 'error' })
         end
     end
+end
+
+function VRS.DoVehicleCleaning(vehicle, plate, shopId)
+    local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', 'cleaning')
+    if not serviceState then return end
+
+    VRS.PlayAnimation(serviceState.context.animationSet or 'cleaning')
+
+    local success = lib.progressBar({
+        duration = serviceState.context.duration or 9000,
+        label = 'Limpando e finalizando o veículo...',
+        useWhileDead = false,
+        canCancel = true,
+        disable = { move = true, car = true, combat = true },
+    })
+
+    VRS.StopAnimation()
+    VRS.FinishContextualVehicleService(vehicle, serviceState)
+
+    if not success then
+        lib.notify({ title = 'Cancelado', description = 'A limpeza foi interrompida.', type = 'error' })
+        return
+    end
+
+    local removed = lib.callback.await('vrs_mechanic:server:removeItem', false, 'cleaning_kit', 1)
+    if not removed then
+        lib.notify({ title = 'Erro', description = 'Você precisa de um kit de limpeza para concluir este serviço.', type = 'error' })
+        return
+    end
+
+    SetVehicleDirtLevel(vehicle, 0.0)
+    WashDecalsFromVehicle(vehicle, 1.0)
+
+    lib.notify({ title = 'Limpeza', description = 'Limpeza concluída com acabamento profissional.', type = 'success' })
 end

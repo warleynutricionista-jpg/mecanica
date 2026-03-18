@@ -79,14 +79,13 @@ lib.callback.register('vrs_mechanic:server:repairPart', function(source, data)
         end
     end
 
-    -- Validar distância
-    if netId then
-        local entity = NetworkGetEntityFromNetworkId(netId)
-        if entity and entity ~= 0 then
-            if not VRS.ValidateDistance(src, entity, 10.0) then
-                return { success = false, reason = 'too_far' }
-            end
-        end
+    local serviceValid, serviceReason = VRS.ValidateServiceContext(src, 'repair', part, {
+        plate = plate,
+        netId = netId,
+        shopId = shopId,
+    })
+    if not serviceValid then
+        return { success = false, reason = serviceReason or 'invalid_vehicle' }
     end
 
     -- Verificar e consumir materiais
@@ -144,14 +143,12 @@ lib.callback.register('vrs_mechanic:server:streetRepair', function(source, data)
         return { success = false, reason = 'not_allowed_street' }
     end
 
-    -- Validar distância
-    if netId then
-        local entity = NetworkGetEntityFromNetworkId(netId)
-        if entity and entity ~= 0 then
-            if not VRS.ValidateDistance(src, entity, 5.0) then
-                return { success = false, reason = 'too_far' }
-            end
-        end
+    local serviceValid, serviceReason = VRS.ValidateServiceContext(src, 'repair', part, {
+        plate = plate,
+        netId = netId,
+    })
+    if not serviceValid then
+        return { success = false, reason = serviceReason or 'invalid_vehicle' }
     end
 
     -- Verificar e consumir materiais
@@ -193,6 +190,7 @@ lib.callback.register('vrs_mechanic:server:changeOil', function(source, data)
     local src = source
     local plate = data.plate
     local shopId = data.shopId
+    local netId = data.netId
 
     if not plate then
         return { success = false, reason = 'invalid_data' }
@@ -200,6 +198,15 @@ lib.callback.register('vrs_mechanic:server:changeOil', function(source, data)
 
     if not VRS.CheckCooldown(src, 'repair') then
         return { success = false, reason = 'cooldown' }
+    end
+
+    local serviceValid, serviceReason = VRS.ValidateServiceContext(src, 'repair', 'oil', {
+        plate = plate,
+        netId = netId,
+        shopId = shopId,
+    })
+    if not serviceValid then
+        return { success = false, reason = serviceReason or 'invalid_vehicle' }
     end
 
     -- Verificar item de óleo

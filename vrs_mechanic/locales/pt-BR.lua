@@ -220,6 +220,67 @@ Locale.UI = {
         no_permission = 'Você não tem permissão para isso.',
         action_cooldown = 'Aguarde antes de fazer isso novamente.',
     },
+
+    -- HUB F12
+    hub = {
+        title = 'HUB da Mecânica',
+        subtitle = 'Acesso rápido aos painéis da oficina',
+
+        -- Botões do HUB
+        open_tablet = 'Abrir Tablet',
+        open_tablet_desc = 'Acessar o tablet da oficina',
+        diagnostic = 'Diagnóstico Rápido',
+        diagnostic_desc = 'Verificar estado do veículo próximo',
+        work_orders = 'Ordens de Serviço',
+        work_orders_desc = 'Visualizar e gerenciar ordens de serviço',
+        billing = 'Emitir Cobrança',
+        billing_desc = 'Cobrar um jogador próximo pelo serviço',
+        employees = 'Funcionários',
+        employees_desc = 'Gerenciar funcionários da oficina',
+        management = 'Gestão da Oficina',
+        management_desc = 'Painel administrativo completo',
+        stash = 'Estoque da Oficina',
+        stash_desc = 'Acessar o estoque de peças e materiais',
+        quick_services = 'Serviços Rápidos',
+        quick_services_desc = 'Reparos e serviços rápidos no veículo',
+        settings = 'Configurações',
+        settings_desc = 'Configurações internas da oficina',
+        close = 'Fechar',
+        close_desc = 'Fechar o HUB',
+
+        -- Mensagens de bloqueio
+        blocked_not_mechanic = 'Apenas mecânicos podem acessar este painel.',
+        blocked_not_on_duty = 'Você precisa entrar em serviço para usar esta função.',
+        blocked_dead = 'Você não pode abrir o painel agora.',
+        blocked_busy = 'Feche o painel atual antes de abrir outro.',
+        blocked_cooldown = 'Aguarde antes de abrir novamente.',
+        blocked_no_shop = 'Essa função só está disponível dentro da oficina.',
+        blocked_no_vehicle = 'Nenhum veículo próximo para diagnóstico.',
+        blocked_in_vehicle = 'Saia do veículo para acessar o painel.',
+        blocked_invalid_state = 'Você não pode abrir o painel agora.',
+        blocked_management_outside = 'Funções de gestão só estão disponíveis dentro da oficina.',
+
+        -- Contexto
+        context_outside = 'Fora da oficina - opções limitadas',
+        context_inside = 'Dentro da oficina',
+        context_near_vehicle = 'Veículo próximo detectado',
+
+        -- Quick services submenu
+        quick_repair = 'Reparo Rápido',
+        quick_repair_desc = 'Reparar subsistema do veículo próximo',
+        quick_oil = 'Troca de Óleo Rápida',
+        quick_oil_desc = 'Trocar óleo do veículo próximo',
+        quick_tyre = 'Trocar Pneu',
+        quick_tyre_desc = 'Trocar pneu furado do veículo próximo',
+        quick_wash = 'Lavagem Rápida',
+        quick_wash_desc = 'Lavar o veículo próximo',
+
+        -- Settings submenu
+        settings_prices = 'Preços dos Serviços',
+        settings_prices_desc = 'Ajustar preços cobrados pela oficina',
+        settings_logs = 'Histórico de Atividades',
+        settings_logs_desc = 'Visualizar logs da oficina',
+    },
 }
 
 return Locale

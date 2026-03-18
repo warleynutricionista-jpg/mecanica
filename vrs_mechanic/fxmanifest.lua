@@ -17,6 +17,7 @@ client_scripts {
     'config/shared.lua',
     'config/shops.lua',
     'config/items.lua',
+    'config/panel.lua',
     'shared/*.lua',
     'client/main.lua',
     'client/zones.lua',
@@ -28,6 +29,7 @@ client_scripts {
     'client/tablet.lua',
     'client/animations.lua',
     'client/degradation.lua',
+    'client/hub.lua',
 }
 
 server_scripts {
@@ -35,8 +37,10 @@ server_scripts {
     'config/shared.lua',
     'config/shops.lua',
     'config/items.lua',
+    'config/panel.lua',
     'shared/*.lua',
     'server/main.lua',
+    'server/panel_access.lua',
     'server/vehicles.lua',
     'server/repairs.lua',
     'server/inventory.lua',

@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VRS Mechanic Tablet</title>
+    <title>VRS Mechanic</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- ============================================ -->
+    <!-- TABLET UI -->
+    <!-- ============================================ -->
     <div id="tablet" class="hidden">
         <div class="tablet-shell">
             <aside class="sidebar">
@@ -182,6 +186,77 @@
                     <div id="logs-list" class="stack-list"></div>
                 </section>
             </main>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- MINI PAINEL DO ELEVADOR -->
+    <!-- ============================================ -->
+    <div id="lift-panel" class="hidden">
+        <div class="lift-panel-shell">
+            <!-- Cabeçalho -->
+            <div class="lift-header">
+                <div class="lift-header-left">
+                    <div class="lift-led" id="lift-led"></div>
+                    <div>
+                        <div class="lift-title" id="lift-title">ELEVADOR #1</div>
+                        <div class="lift-subtitle" id="lift-shop-label">Oficina</div>
+                    </div>
+                </div>
+                <button class="lift-close-btn" id="lift-close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Status -->
+            <div class="lift-status-row">
+                <div class="lift-status-item">
+                    <i class="fas fa-car"></i>
+                    <span id="lift-vehicle-status">Sem veículo</span>
+                </div>
+                <div class="lift-status-item">
+                    <i class="fas fa-ruler-vertical"></i>
+                    <span id="lift-height-display">0.00m</span>
+                </div>
+            </div>
+
+            <!-- Barra de altura -->
+            <div class="lift-height-bar-container">
+                <div class="lift-height-bar">
+                    <div class="lift-height-fill" id="lift-height-fill"></div>
+                </div>
+                <div class="lift-height-label" id="lift-height-label">Base</div>
+            </div>
+
+            <!-- Controles principais -->
+            <div class="lift-controls">
+                <button class="lift-btn lift-btn-up" id="lift-btn-up" title="Subir elevador">
+                    <i class="fas fa-chevron-up"></i>
+                    <span>SUBIR</span>
+                </button>
+                <button class="lift-btn lift-btn-stop" id="lift-btn-stop" title="Parar elevador">
+                    <i class="fas fa-stop"></i>
+                    <span>PARAR</span>
+                </button>
+                <button class="lift-btn lift-btn-down" id="lift-btn-down" title="Descer elevador">
+                    <i class="fas fa-chevron-down"></i>
+                    <span>DESCER</span>
+                </button>
+            </div>
+
+            <!-- Presets rápidos -->
+            <div class="lift-presets">
+                <div class="lift-presets-label">POSIÇÕES RÁPIDAS</div>
+                <div class="lift-presets-grid" id="lift-presets-grid">
+                    <!-- Gerado dinamicamente -->
+                </div>
+            </div>
+
+            <!-- Indicador de movimento -->
+            <div class="lift-movement-indicator hidden" id="lift-movement-indicator">
+                <div class="lift-movement-dot"></div>
+                <span id="lift-movement-text">Elevador em movimento</span>
+            </div>
         </div>
     </div>
 

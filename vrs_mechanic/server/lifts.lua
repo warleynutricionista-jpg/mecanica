@@ -1,5 +1,5 @@
 -- ============================================================
--- VRS_MECHANIC - LIFTS SERVER
+-- VRS_MECHANIC - LIFTS SERVER (sistema baseado em mh-carlift)
 -- ============================================================
 
 VRS.LiftStates = VRS.LiftStates or {}
@@ -7,21 +7,22 @@ VRS.LiftStates = VRS.LiftStates or {}
 local presetFile = Config.Lift.savedPresetFile or 'lift_presets.json'
 local savedLiftHeights = {}
 
-local function cloneTable(value)
-    if type(value) ~= 'table' then
-        return value
-    end
-
-    local cloned = {}
-    for key, data in pairs(value) do
-        cloned[key] = data
-    end
-    return cloned
-end
-
+-- ============================================================
+-- HELPERS
+-- ============================================================
 
 local function getLiftKey(shopId, liftIndex)
     return ('%s_%s'):format(shopId, liftIndex)
+end
+
+local function roundHeight(value)
+    return tonumber(('%0.3f'):format(value or 0.0)) or 0.0
+end
+
+local function clampHeight(height)
+    local numericHeight = tonumber(height)
+    if not numericHeight then return nil end
+    return VRS.Clamp(numericHeight, Config.Lift.MinHeight or 0.0, Config.Lift.MaxHeight or 2.1)
 end
 
 local function getPresetKey(source, shopId, liftIndex)
@@ -30,6 +31,10 @@ local function getPresetKey(source, shopId, liftIndex)
     return ('%s:%s:%s'):format(player.PlayerData.citizenid, shopId, liftIndex)
 end
 
+-- ============================================================
+-- PERSISTÊNCIA DE ALTURAS SALVAS
+-- ============================================================
+
 local function loadSavedHeights()
     local resourceName = GetCurrentResourceName()
     local raw = LoadResourceFile(resourceName, presetFile)
@@ -37,7 +42,6 @@ local function loadSavedHeights()
         savedLiftHeights = {}
         return
     end
-
     local decoded = json.decode(raw)
     savedLiftHeights = type(decoded) == 'table' and decoded or {}
 end
@@ -46,24 +50,9 @@ local function persistSavedHeights()
     SaveResourceFile(GetCurrentResourceName(), presetFile, json.encode(savedLiftHeights), -1)
 end
 
-local function clampHeight(height)
-    local numericHeight = tonumber(height)
-    if not numericHeight then return nil end
-    return VRS.Clamp(numericHeight, Config.Lift.MinHeight or 0.0, Config.Lift.MaxHeight or 1.2)
-end
-
-local function getLegacyLevelFromHeight(height)
-    local levels = Config.Lift.levels or {}
-    local bestIndex, bestDelta = 1, math.huge
-    for index, level in ipairs(levels) do
-        local delta = math.abs((level.zOffset or 0.0) - (height or 0.0))
-        if delta < bestDelta then
-            bestIndex = index
-            bestDelta = delta
-        end
-    end
-    return bestIndex
-end
+-- ============================================================
+-- ESTADO DO ELEVADOR
+-- ============================================================
 
 local function buildLiftState(shopId, liftIndex)
     local key = getLiftKey(shopId, liftIndex)
@@ -72,40 +61,30 @@ local function buildLiftState(shopId, liftIndex)
         liftIndex = liftIndex,
         height = Config.Lift.MinHeight or 0.0,
         minHeight = Config.Lift.MinHeight or 0.0,
-        maxHeight = Config.Lift.MaxHeight or 1.2,
+        maxHeight = Config.Lift.MaxHeight or 2.1,
         vehicleNetId = nil,
         plate = nil,
-        busy = false,
-        targetHeight = Config.Lift.MinHeight or 0.0,
+        moving = false,
+        direction = nil,
     }
 
     state.minHeight = Config.Lift.MinHeight or 0.0
-    state.maxHeight = Config.Lift.MaxHeight or 1.2
+    state.maxHeight = Config.Lift.MaxHeight or 2.1
     state.height = clampHeight(state.height) or state.minHeight
-    state.targetHeight = clampHeight(state.targetHeight) or state.height
-    state.level = getLegacyLevelFromHeight(state.height)
 
+    -- Validar que o veículo ainda existe
     if state.vehicleNetId and state.vehicleNetId ~= 0 then
         local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
         if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
             state.vehicleNetId = nil
             state.plate = nil
             state.height = state.minHeight
-            state.targetHeight = state.minHeight
-            state.busy = false
+            state.moving = false
+            state.direction = nil
         end
     end
 
     return state
-end
-
-local function enrichStateForSource(source, state, shopId, liftIndex)
-    if not state then return nil end
-
-    local response = cloneTable(state)
-    local presetKey = getPresetKey(source, shopId, liftIndex)
-    response.savedHeight = presetKey and savedLiftHeights[presetKey] or nil
-    return response
 end
 
 local function syncLiftState(shopId, liftIndex)
@@ -114,6 +93,14 @@ local function syncLiftState(shopId, liftIndex)
     TriggerClientEvent('vrs_mechanic:client:syncLiftState', -1, shopId, liftIndex, state)
     return state
 end
+
+local function broadcastMovement(shopId, liftIndex, direction)
+    TriggerClientEvent('vrs_mechanic:client:liftMovement', -1, shopId, liftIndex, direction or 'stop')
+end
+
+-- ============================================================
+-- VALIDAÇÃO DE ACESSO
+-- ============================================================
 
 local function validateLiftAccess(source, shopId, liftIndex)
     local shop = Config.Shops[shopId]
@@ -125,7 +112,7 @@ local function validateLiftAccess(source, shopId, liftIndex)
         if not VRS.HasShopAccess(source, shopId) then
             return false, 'no_access'
         end
-        if Config.ShopRepair.requireDuty and not VRS.IsOnDuty(source) then
+        if Config.Lift.requireDuty and not VRS.IsOnDuty(source) then
             return false, 'not_on_duty'
         end
     end
@@ -133,103 +120,23 @@ local function validateLiftAccess(source, shopId, liftIndex)
     return true, nil, shop
 end
 
-local function getMoveDurationMs(fromHeight, toHeight)
-    local distance = math.abs((toHeight or 0.0) - (fromHeight or 0.0))
-    if distance <= 0.001 then
-        return 0
-    end
-
-    local speed = math.max(Config.Lift.MoveSpeed or 0.18, 0.01)
-    local duration = math.floor((distance / speed) * 1000)
-    return math.max(duration, Config.Lift.minMoveDuration or 900)
-end
-
-local function finalizeLiftMovement(shopId, liftIndex, targetHeight)
-    local key = getLiftKey(shopId, liftIndex)
-    local state = buildLiftState(shopId, liftIndex)
-
-    if math.abs((state.targetHeight or 0.0) - (targetHeight or 0.0)) > 0.001 then
-        return
-    end
-
-    state.height = targetHeight
-    state.targetHeight = targetHeight
-    state.level = getLegacyLevelFromHeight(targetHeight)
-    state.busy = false
-    VRS.LiftStates[key] = state
-    syncLiftState(shopId, liftIndex)
-end
-
-local function buildActionResponse(source, shopId, liftIndex, state, message)
-    local enrichedState = enrichStateForSource(source, state, shopId, liftIndex)
-    return {
-        success = true,
-        state = enrichedState,
-        savedHeight = enrichedState and enrichedState.savedHeight or nil,
-        message = message,
-    }
-end
-
-local function setLiftHeightInternal(source, shopId, liftIndex, targetHeight, successMessage)
-    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
-    if not ok then
-        return { success = false, reason = reason }
-    end
-
-    local key = getLiftKey(shopId, liftIndex)
-    local state = buildLiftState(shopId, liftIndex)
-    if state.busy then
-        return { success = false, reason = 'lift_busy' }
-    end
-
-    local clamped = clampHeight(targetHeight)
-    if clamped == nil then
-        return { success = false, reason = 'invalid_height' }
-    end
-
-    local currentHeight = state.height or (Config.Lift.MinHeight or 0.0)
-    local tolerance = Config.Lift.positionTolerance or 0.02
-
-    if clamped > (Config.Lift.MinHeight or 0.0) + tolerance and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
-        return { success = false, reason = 'lift_empty' }
-    end
-
-    if math.abs(clamped - currentHeight) <= tolerance then
-        if clamped >= (Config.Lift.MaxHeight or 1.2) - tolerance then
-            return { success = false, reason = 'already_top' }
-        elseif clamped <= (Config.Lift.MinHeight or 0.0) + tolerance then
-            return { success = false, reason = 'already_bottom' }
-        end
-
-        return { success = false, reason = 'same_height' }
-    end
-
-    local moveDuration = getMoveDurationMs(currentHeight, clamped)
-    state.height = clamped
-    state.targetHeight = clamped
-    state.level = getLegacyLevelFromHeight(clamped)
-    state.busy = moveDuration > 0
-    VRS.LiftStates[key] = state
-
-    local synced = syncLiftState(shopId, liftIndex)
-
-    if moveDuration > 0 then
-        SetTimeout(moveDuration, function()
-            finalizeLiftMovement(shopId, liftIndex, clamped)
-        end)
-    end
-
-    return buildActionResponse(source, shopId, liftIndex, synced, successMessage)
-end
+-- ============================================================
+-- CALLBACKS: ESTADO
+-- ============================================================
 
 lib.callback.register('vrs_mechanic:server:getLiftState', function(source, shopId, liftIndex)
     local ok = validateLiftAccess(source, shopId, liftIndex)
-    if not ok then
-        return nil
-    end
+    if not ok then return nil end
 
-    return enrichStateForSource(source, syncLiftState(shopId, liftIndex), shopId, liftIndex)
+    local state = syncLiftState(shopId, liftIndex)
+    local presetKey = getPresetKey(source, shopId, liftIndex)
+    state.savedHeight = presetKey and savedLiftHeights[presetKey] or nil
+    return state
 end)
+
+-- ============================================================
+-- CALLBACKS: COLOCAR/RETIRAR VEÍCULO
+-- ============================================================
 
 lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source, shopId, liftIndex, netId, plate)
     local src = source
@@ -245,7 +152,8 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
 
     local key = getLiftKey(shopId, liftIndex)
     local state = buildLiftState(shopId, liftIndex)
-    if state.busy then
+
+    if state.moving then
         return { success = false, reason = 'lift_busy' }
     end
 
@@ -256,91 +164,12 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
     state.vehicleNetId = netId
     state.plate = plate
     state.height = Config.Lift.MinHeight or 0.0
-    state.targetHeight = state.height
-    state.level = getLegacyLevelFromHeight(state.height)
-    state.busy = false
+    state.moving = false
+    state.direction = nil
     VRS.LiftStates[key] = state
 
-    return buildActionResponse(src, shopId, liftIndex, syncLiftState(shopId, liftIndex), 'Veículo posicionado e pronto para serviço.')
-end)
-
-lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shopId, liftIndex, targetHeight)
-    return setLiftHeightInternal(source, shopId, liftIndex, targetHeight)
-end)
-
-lib.callback.register('vrs_mechanic:server:moveLiftDirection', function(source, shopId, liftIndex, direction)
-    local state = buildLiftState(shopId, liftIndex)
-    local step = Config.Lift.StepHeight or 0.15
-    local targetHeight = (state.height or 0.0) + (direction == 'up' and step or -step)
-    local message = direction == 'up' and 'Elevador subindo.' or 'Elevador descendo.'
-    return setLiftHeightInternal(source, shopId, liftIndex, targetHeight, message)
-end)
-
-lib.callback.register('vrs_mechanic:server:saveLiftHeight', function(source, shopId, liftIndex)
-    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
-    if not ok then
-        return { success = false, reason = reason }
-    end
-
-    local state = buildLiftState(shopId, liftIndex)
-    if state.busy then
-        return { success = false, reason = 'lift_busy' }
-    end
-
-    local presetKey = getPresetKey(source, shopId, liftIndex)
-    if not presetKey then
-        return { success = false, reason = 'no_access' }
-    end
-
-    savedLiftHeights[presetKey] = clampHeight(state.height) or (Config.Lift.MinHeight or 0.0)
-    persistSavedHeights()
-
-    return {
-        success = true,
-        state = enrichStateForSource(source, state, shopId, liftIndex),
-        savedHeight = savedLiftHeights[presetKey],
-        message = 'Altura atual salva com sucesso.',
-    }
-end)
-
-lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source, shopId, liftIndex)
-    local presetKey = getPresetKey(source, shopId, liftIndex)
-    if not presetKey or savedLiftHeights[presetKey] == nil then
-        return { success = false, reason = 'no_saved_height' }
-    end
-
-    return setLiftHeightInternal(source, shopId, liftIndex, savedLiftHeights[presetKey], 'Elevador indo para a altura salva.')
-end)
-
-lib.callback.register('vrs_mechanic:server:resetLiftHeight', function(source, shopId, liftIndex)
-    return setLiftHeightInternal(source, shopId, liftIndex, Config.Lift.MinHeight or 0.0, 'Elevador retornando para a posição inicial.')
-end)
-
-lib.callback.register('vrs_mechanic:server:resetSavedLiftHeight', function(source, shopId, liftIndex)
-    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
-    if not ok then
-        return { success = false, reason = reason }
-    end
-
-    local state = buildLiftState(shopId, liftIndex)
-    if state.busy then
-        return { success = false, reason = 'lift_busy' }
-    end
-
-    local presetKey = getPresetKey(source, shopId, liftIndex)
-    if not presetKey or savedLiftHeights[presetKey] == nil then
-        return { success = false, reason = 'no_saved_height' }
-    end
-
-    savedLiftHeights[presetKey] = nil
-    persistSavedHeights()
-
-    return {
-        success = true,
-        state = enrichStateForSource(source, state, shopId, liftIndex),
-        savedHeight = nil,
-        message = 'Altura salva resetada com sucesso.',
-    }
+    local synced = syncLiftState(shopId, liftIndex)
+    return { success = true, state = synced, message = 'Veículo posicionado e pronto para serviço.' }
 end)
 
 lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(source, shopId, liftIndex)
@@ -352,7 +181,8 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
 
     local key = getLiftKey(shopId, liftIndex)
     local state = buildLiftState(shopId, liftIndex)
-    if state.busy then
+
+    if state.moving then
         return { success = false, reason = 'lift_busy' }
     end
 
@@ -360,7 +190,8 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
         return { success = false, reason = 'lift_empty' }
     end
 
-    if (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + (Config.Lift.positionTolerance or 0.02)) then
+    local tolerance = 0.05
+    if (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + tolerance) then
         return { success = false, reason = 'lift_not_lowered' }
     end
 
@@ -368,17 +199,241 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
         shopId = shopId,
         liftIndex = liftIndex,
         height = Config.Lift.MinHeight or 0.0,
-        targetHeight = Config.Lift.MinHeight or 0.0,
         minHeight = Config.Lift.MinHeight or 0.0,
-        maxHeight = Config.Lift.MaxHeight or 1.2,
-        level = 1,
+        maxHeight = Config.Lift.MaxHeight or 2.1,
         vehicleNetId = nil,
         plate = nil,
-        busy = false,
+        moving = false,
+        direction = nil,
     }
 
     syncLiftState(shopId, liftIndex)
     return { success = true }
 end)
+
+-- ============================================================
+-- CALLBACKS: CONTROLE DE MOVIMENTO
+-- ============================================================
+
+lib.callback.register('vrs_mechanic:server:liftCommand', function(source, shopId, liftIndex, command)
+    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
+    if not ok then
+        return { success = false, reason = reason }
+    end
+
+    local key = getLiftKey(shopId, liftIndex)
+    local state = buildLiftState(shopId, liftIndex)
+
+    if command == 'stop' then
+        state.moving = false
+        state.direction = nil
+        VRS.LiftStates[key] = state
+        syncLiftState(shopId, liftIndex)
+        broadcastMovement(shopId, liftIndex, 'stop')
+        return { success = true }
+    end
+
+    -- Validar up/down
+    if command == 'up' then
+        if Config.Lift.requireVehicleToRaise and not state.vehicleNetId then
+            return { success = false, reason = 'lift_empty' }
+        end
+        if (state.height or 0.0) >= (Config.Lift.MaxHeight or 2.1) - 0.01 then
+            return { success = false, reason = 'already_top' }
+        end
+    elseif command == 'down' then
+        if (state.height or 0.0) <= (Config.Lift.MinHeight or 0.0) + 0.01 then
+            return { success = false, reason = 'already_bottom' }
+        end
+    end
+
+    state.moving = true
+    state.direction = command
+    VRS.LiftStates[key] = state
+    syncLiftState(shopId, liftIndex)
+    broadcastMovement(shopId, liftIndex, command)
+
+    return { success = true }
+end)
+
+-- ============================================================
+-- CALLBACKS: ALTURA PREDEFINIDA
+-- ============================================================
+
+lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shopId, liftIndex, targetHeight)
+    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
+    if not ok then
+        return { success = false, reason = reason }
+    end
+
+    local key = getLiftKey(shopId, liftIndex)
+    local state = buildLiftState(shopId, liftIndex)
+
+    if state.moving then
+        return { success = false, reason = 'lift_busy' }
+    end
+
+    local clamped = clampHeight(targetHeight)
+    if clamped == nil then
+        return { success = false, reason = 'invalid_height' }
+    end
+
+    if clamped > (Config.Lift.MinHeight or 0.0) + 0.01 and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
+        return { success = false, reason = 'lift_empty' }
+    end
+
+    local currentHeight = state.height or 0.0
+    if math.abs(clamped - currentHeight) <= 0.02 then
+        return { success = false, reason = 'same_height' }
+    end
+
+    -- Determinar direção e iniciar movimento contínuo até o alvo
+    local direction = clamped > currentHeight and 'up' or 'down'
+    state.moving = true
+    state.direction = direction
+    state.targetHeight = clamped
+    VRS.LiftStates[key] = state
+    syncLiftState(shopId, liftIndex)
+    broadcastMovement(shopId, liftIndex, direction)
+
+    -- Monitorar até atingir altura alvo
+    CreateThread(function()
+        while true do
+            Wait(100)
+            local currentState = VRS.LiftStates[key]
+            if not currentState or not currentState.moving then break end
+            if not currentState.targetHeight then break end
+
+            -- Verificar se atingiu o alvo (clientes atualizam height)
+            local h = currentState.height or 0.0
+            if math.abs(h - clamped) <= 0.03 or
+               (direction == 'up' and h >= clamped) or
+               (direction == 'down' and h <= clamped) then
+                currentState.height = clamped
+                currentState.moving = false
+                currentState.direction = nil
+                currentState.targetHeight = nil
+                VRS.LiftStates[key] = currentState
+                syncLiftState(shopId, liftIndex)
+                broadcastMovement(shopId, liftIndex, 'stop')
+                break
+            end
+        end
+    end)
+
+    return { success = true }
+end)
+
+-- ============================================================
+-- CALLBACKS: SALVAR/CARREGAR ALTURAS
+-- ============================================================
+
+lib.callback.register('vrs_mechanic:server:saveLiftHeight', function(source, shopId, liftIndex)
+    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
+    if not ok then return { success = false, reason = reason } end
+
+    local state = buildLiftState(shopId, liftIndex)
+    local presetKey = getPresetKey(source, shopId, liftIndex)
+    if not presetKey then return { success = false, reason = 'no_access' } end
+
+    savedLiftHeights[presetKey] = clampHeight(state.height) or (Config.Lift.MinHeight or 0.0)
+    persistSavedHeights()
+
+    return {
+        success = true,
+        savedHeight = savedLiftHeights[presetKey],
+        message = 'Altura salva com sucesso.',
+    }
+end)
+
+lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source, shopId, liftIndex)
+    local presetKey = getPresetKey(source, shopId, liftIndex)
+    if not presetKey or savedLiftHeights[presetKey] == nil then
+        return { success = false, reason = 'no_saved_height' }
+    end
+
+    -- Reutilizar lógica de setLiftHeight diretamente
+    local ok, reason = validateLiftAccess(source, shopId, liftIndex)
+    if not ok then return { success = false, reason = reason } end
+
+    local key = getLiftKey(shopId, liftIndex)
+    local state = buildLiftState(shopId, liftIndex)
+    if state.moving then return { success = false, reason = 'lift_busy' } end
+
+    local targetHeight = savedLiftHeights[presetKey]
+    local clamped = clampHeight(targetHeight)
+    if clamped == nil then return { success = false, reason = 'invalid_height' } end
+    if clamped > (Config.Lift.MinHeight or 0.0) + 0.01 and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
+        return { success = false, reason = 'lift_empty' }
+    end
+
+    local currentHeight = state.height or 0.0
+    if math.abs(clamped - currentHeight) <= 0.02 then
+        return { success = false, reason = 'same_height' }
+    end
+
+    local direction = clamped > currentHeight and 'up' or 'down'
+    state.moving = true
+    state.direction = direction
+    state.targetHeight = clamped
+    VRS.LiftStates[key] = state
+    syncLiftState(shopId, liftIndex)
+    broadcastMovement(shopId, liftIndex, direction)
+
+    CreateThread(function()
+        while true do
+            Wait(100)
+            local currentState = VRS.LiftStates[key]
+            if not currentState or not currentState.moving then break end
+            if not currentState.targetHeight then break end
+            local h = currentState.height or 0.0
+            if math.abs(h - clamped) <= 0.03 or
+               (direction == 'up' and h >= clamped) or
+               (direction == 'down' and h <= clamped) then
+                currentState.height = clamped
+                currentState.moving = false
+                currentState.direction = nil
+                currentState.targetHeight = nil
+                VRS.LiftStates[key] = currentState
+                syncLiftState(shopId, liftIndex)
+                broadcastMovement(shopId, liftIndex, 'stop')
+                break
+            end
+        end
+    end)
+
+    return { success = true }
+end)
+
+-- ============================================================
+-- BUSCA DE VEÍCULO EM ELEVADOR
+-- ============================================================
+
+function VRS.FindLiftByVehicle(plate, netId)
+    for key, state in pairs(VRS.LiftStates or {}) do
+        if state and state.vehicleNetId and
+           ((netId and state.vehicleNetId == netId) or (plate and state.plate == plate)) then
+            return key, state
+        end
+    end
+    return nil, nil
+end
+
+-- ============================================================
+-- SYNC DE ALTURA DO CLIENT
+-- ============================================================
+
+RegisterNetEvent('vrs_mechanic:server:syncLiftHeight', function(shopId, liftIndex, height)
+    local key = getLiftKey(shopId, liftIndex)
+    local state = VRS.LiftStates[key]
+    if state then
+        state.height = roundHeight(height)
+        VRS.LiftStates[key] = state
+    end
+end)
+
+-- ============================================================
+-- INICIALIZAÇÃO
+-- ============================================================
 
 CreateThread(loadSavedHeights)

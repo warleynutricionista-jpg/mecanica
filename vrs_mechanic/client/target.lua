@@ -40,6 +40,7 @@ local function createLiftTargets(shopId, shop)
     if not shop.lifts then return end
 
     for i, lift in ipairs(shop.lifts) do
+        -- Zona do elevador (para menu de serviços)
         local liftId = ('vrs_lift_%s_%d'):format(shopId, i)
         liftTargets[liftId] = exports.ox_target:addBoxZone({
             coords = vec3(lift.coords.x, lift.coords.y, lift.coords.z),
@@ -59,90 +60,26 @@ local function createLiftTargets(shopId, shop)
             },
         })
 
+        -- Painel de controle físico (abre NUI mini panel)
         local panelCoords = getLiftPanelCoords(lift)
         local panelId = ('vrs_lift_panel_%s_%d'):format(shopId, i)
         panelTargets[panelId] = exports.ox_target:addBoxZone({
             coords = vec3(panelCoords.x, panelCoords.y, panelCoords.z),
-            size = Config.Lift.controlPanelSize or vec3(0.45, 0.55, 1.6),
+            size = Config.Lift.controlPanelSize or vec3(0.6, 0.6, 1.8),
             rotation = panelCoords.w or 0.0,
             debug = false,
             options = {
                 {
-                    name = panelId .. '_up',
-                    icon = 'fas fa-arrow-up',
-                    label = 'Subir elevador',
-                    distance = Config.Lift.controlPanelDistance or 1.6,
+                    name = panelId .. '_open',
+                    icon = 'fas fa-sliders',
+                    label = 'Painel do Elevador',
+                    distance = Config.Lift.controlPanelDistance or 2.5,
                     groups = shop.job and { [shop.job] = 0 } or nil,
                     canInteract = function()
                         return canUseLiftPanel(shopId)
                     end,
                     onSelect = function()
-                        VRS.UseLiftPanelAction(shopId, i, 'up')
-                    end,
-                },
-                {
-                    name = panelId .. '_down',
-                    icon = 'fas fa-arrow-down',
-                    label = 'Descer elevador',
-                    distance = Config.Lift.controlPanelDistance or 1.6,
-                    groups = shop.job and { [shop.job] = 0 } or nil,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId)
-                    end,
-                    onSelect = function()
-                        VRS.UseLiftPanelAction(shopId, i, 'down')
-                    end,
-                },
-                {
-                    name = panelId .. '_save',
-                    icon = 'fas fa-floppy-disk',
-                    label = 'Salvar altura atual',
-                    distance = Config.Lift.controlPanelDistance or 1.6,
-                    groups = shop.job and { [shop.job] = 0 } or nil,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId)
-                    end,
-                    onSelect = function()
-                        VRS.UseLiftPanelAction(shopId, i, 'save_current')
-                    end,
-                },
-                {
-                    name = panelId .. '_goto_saved',
-                    icon = 'fas fa-bookmark',
-                    label = 'Ir para altura salva',
-                    distance = Config.Lift.controlPanelDistance or 1.6,
-                    groups = shop.job and { [shop.job] = 0 } or nil,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId)
-                    end,
-                    onSelect = function()
-                        VRS.UseLiftPanelAction(shopId, i, 'go_saved')
-                    end,
-                },
-                {
-                    name = panelId .. '_reset_height',
-                    icon = 'fas fa-rotate-left',
-                    label = 'Resetar para posição inicial',
-                    distance = Config.Lift.controlPanelDistance or 1.6,
-                    groups = shop.job and { [shop.job] = 0 } or nil,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId)
-                    end,
-                    onSelect = function()
-                        VRS.UseLiftPanelAction(shopId, i, 'reset_height')
-                    end,
-                },
-                {
-                    name = panelId .. '_reset_saved',
-                    icon = 'fas fa-trash-can',
-                    label = 'Resetar altura salva',
-                    distance = Config.Lift.controlPanelDistance or 1.6,
-                    groups = shop.job and { [shop.job] = 0 } or nil,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId)
-                    end,
-                    onSelect = function()
-                        VRS.UseLiftPanelAction(shopId, i, 'reset_saved')
+                        VRS.OpenLiftPanel(shopId, i)
                     end,
                 },
             },

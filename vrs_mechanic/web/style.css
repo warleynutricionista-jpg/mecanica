@@ -266,3 +266,310 @@ body {
 }
 
 .compact-card { max-width: 720px; }
+
+/* ============================================ */
+/* MINI PAINEL DO ELEVADOR                     */
+/* ============================================ */
+
+#lift-panel {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    z-index: 9999;
+    pointer-events: auto;
+}
+
+.lift-panel-shell {
+    width: 280px;
+    background: linear-gradient(180deg, #1a1e2e 0%, #12151f 60%, #0d1018 100%);
+    border: 1px solid rgba(100, 120, 180, 0.25);
+    border-radius: 16px;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.6),
+        0 0 1px rgba(100, 140, 255, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-family: 'Inter', 'Segoe UI', monospace, sans-serif;
+    color: #c8d0e8;
+}
+
+/* Cabeçalho */
+.lift-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lift-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.lift-led {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2ecc40;
+    box-shadow: 0 0 6px rgba(46, 204, 64, 0.5);
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+.lift-led.moving {
+    background: #ff851b;
+    box-shadow: 0 0 8px rgba(255, 133, 27, 0.6);
+    animation: led-pulse 0.8s ease-in-out infinite;
+}
+
+.lift-led.empty {
+    background: #555;
+    box-shadow: none;
+}
+
+@keyframes led-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.lift-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e8ecf8;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lift-subtitle {
+    font-size: 11px;
+    color: #7a85a8;
+}
+
+.lift-close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #7a85a8;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    transition: all 0.15s;
+}
+
+.lift-close-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ff9999;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Status */
+.lift-status-row {
+    display: flex;
+    gap: 8px;
+}
+
+.lift-status-item {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.lift-status-item i {
+    color: #5a7aff;
+    font-size: 13px;
+    width: 16px;
+    text-align: center;
+}
+
+/* Barra de altura */
+.lift-height-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.lift-height-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.lift-height-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #4f7bff, #18d0ff);
+    border-radius: 3px;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 6px rgba(79, 123, 255, 0.3);
+}
+
+.lift-height-label {
+    font-size: 11px;
+    color: #5a7aff;
+    font-weight: 600;
+    min-width: 60px;
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Controles principais */
+.lift-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+}
+
+.lift-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 12px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #c8d0e8;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    transition: all 0.15s;
+}
+
+.lift-btn i {
+    font-size: 16px;
+}
+
+.lift-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.lift-btn:active {
+    transform: translateY(0px);
+}
+
+.lift-btn-up:hover {
+    background: rgba(46, 204, 64, 0.15);
+    border-color: rgba(46, 204, 64, 0.3);
+    color: #2ecc40;
+}
+
+.lift-btn-up.active {
+    background: rgba(46, 204, 64, 0.2);
+    border-color: rgba(46, 204, 64, 0.4);
+    color: #2ecc40;
+    box-shadow: 0 0 10px rgba(46, 204, 64, 0.15);
+}
+
+.lift-btn-stop:hover {
+    background: rgba(255, 65, 54, 0.15);
+    border-color: rgba(255, 65, 54, 0.3);
+    color: #ff4136;
+}
+
+.lift-btn-stop.active {
+    background: rgba(255, 65, 54, 0.2);
+    border-color: rgba(255, 65, 54, 0.4);
+    color: #ff4136;
+}
+
+.lift-btn-down:hover {
+    background: rgba(79, 123, 255, 0.15);
+    border-color: rgba(79, 123, 255, 0.3);
+    color: #5a7aff;
+}
+
+.lift-btn-down.active {
+    background: rgba(79, 123, 255, 0.2);
+    border-color: rgba(79, 123, 255, 0.4);
+    color: #5a7aff;
+    box-shadow: 0 0 10px rgba(79, 123, 255, 0.15);
+}
+
+/* Presets */
+.lift-presets {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lift-presets-label {
+    font-size: 10px;
+    color: #5a6580;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.lift-presets-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.lift-preset-btn {
+    padding: 6px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    color: #8a95b8;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+}
+
+.lift-preset-btn:hover {
+    background: rgba(79, 123, 255, 0.12);
+    border-color: rgba(79, 123, 255, 0.25);
+    color: #a8b8ff;
+}
+
+.lift-preset-btn.current {
+    background: rgba(79, 123, 255, 0.18);
+    border-color: rgba(79, 123, 255, 0.35);
+    color: #c8d8ff;
+}
+
+/* Indicador de movimento */
+.lift-movement-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 133, 27, 0.08);
+    border: 1px solid rgba(255, 133, 27, 0.15);
+    border-radius: 8px;
+    font-size: 11px;
+    color: #ff851b;
+}
+
+.lift-movement-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff851b;
+    animation: led-pulse 0.6s ease-in-out infinite;
+}
+
+.lift-movement-indicator.hidden {
+    display: none;
+}

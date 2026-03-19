@@ -5,7 +5,7 @@ lua54 'yes'
 name 'vrs_mechanic'
 author 'VRS Development'
 description 'Sistema completo de mecânica para Qbox/QBX'
-version '1.1.0'
+version '2.0.0'
 
 shared_scripts {
     '@ox_lib/init.lua',

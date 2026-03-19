@@ -126,18 +126,9 @@ Config.Billing = {
 -- ============================================================
 -- ELEVADOR / ZONA DE SERVIÇO
 -- ============================================================
-Config.Lift = {
-    snapDistance = 5.0, -- distância máxima para colocar veículo
-    exitOffset = vec3(3.0, 0.0, 0.0), -- offset para sair do veículo
-    levels = {
-        { label = 'Base', zOffset = 0.0 },
-        { label = 'Serviço', zOffset = 0.85 },
-        { label = 'Alta', zOffset = 1.35 },
-    },
-    moveDuration = 3500,
-    maxDistance = 12.0,
-    requireVehicleToRaise = true,
-}
+-- Configuração completa do elevador está em config/lift.lua
+-- Aqui só mantemos compatibilidade para referências externas
+Config.Lift = Config.Lift or {}
 
 -- ============================================================
 -- UPGRADES

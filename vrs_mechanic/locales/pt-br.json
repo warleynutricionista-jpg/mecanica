@@ -87,7 +87,21 @@
     "lift_remove": "Retirar do Elevador",
     "lift_occupied": "Elevador ocupado.",
     "lift_empty": "Elevador vazio.",
-    "no_vehicle_near": "Nenhum veículo próximo ao elevador."
+    "no_vehicle_near": "Nenhum veículo próximo ao elevador.",
+    "lift_panel": "Painel do Elevador",
+    "lift_up": "Subir elevador",
+    "lift_down": "Descer elevador",
+    "lift_stop": "Parar elevador",
+    "lift_moving": "Elevador em movimento",
+    "lift_no_permission": "Você não tem permissão para usar este elevador.",
+    "lift_no_vehicle": "Nenhum veículo detectado no elevador.",
+    "lift_ready_lower": "Veículo pronto para serviço inferior.",
+    "lift_placed": "Veículo posicionado e pronto para serviço.",
+    "lift_removed": "Veículo retirado da plataforma com sucesso.",
+    "lift_not_lowered": "Abaixe totalmente o elevador antes de retirar o veículo.",
+    "lift_already_top": "Elevador já está na altura máxima.",
+    "lift_already_bottom": "Elevador já está na posição mínima.",
+    "lift_busy": "Aguarde o elevador concluir o movimento atual."
   },
   "duty": {
     "on": "Você entrou em serviço.",

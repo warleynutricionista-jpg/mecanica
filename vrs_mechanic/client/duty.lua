@@ -2,6 +2,18 @@
 -- VRS_MECHANIC - DUTY / STASH / LIFTS CLIENT
 -- ============================================================
 
+local function requestControl(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return false end
+    if NetworkHasControlOfEntity(entity) then return true end
+    NetworkRequestControlOfEntity(entity)
+    local timeout = GetGameTimer() + 1000
+    while not NetworkHasControlOfEntity(entity) and GetGameTimer() < timeout do
+        Wait(0)
+        NetworkRequestControlOfEntity(entity)
+    end
+    return NetworkHasControlOfEntity(entity)
+end
+
 function VRS.ToggleDuty()
     if not VRS.IsMechanic() then
         lib.notify({ title = 'Erro', description = VRS.L.repair.not_mechanic, type = 'error' })
@@ -47,7 +59,7 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
             lib.notify({ title = 'Erro', description = VRS.L.notify.no_permission, type = 'error' })
             return
         end
-        if Config.ShopRepair.requireDuty and not VRS.IsOnDuty() then
+        if Config.Lift.requireDuty and not VRS.IsOnDuty() then
             lib.notify({ title = 'Erro', description = VRS.L.repair.not_on_duty, type = 'error' })
             return
         end
@@ -110,17 +122,21 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         end
 
         options[#options + 1] = {
-            title = 'Painel físico do elevador',
-            description = 'Use o painel do elevador com ox_target para subir, descer ou salvar a altura.',
+            title = 'Abrir Painel do Elevador',
+            description = 'Controle visual com subir, descer, parar e posições rápidas.',
             icon = 'fas fa-sliders',
-            readOnly = true,
+            onSelect = function()
+                VRS.OpenLiftPanel(shopId, liftIndex)
+            end,
         }
 
         options[#options + 1] = {
             title = VRS.L.shop.lift_remove,
-            description = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.01) and 'Abaixe totalmente o elevador antes de retirar o veículo.' or 'Liberar o veículo da plataforma.',
+            description = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.05)
+                and 'Abaixe totalmente o elevador antes de retirar o veículo.'
+                or 'Liberar o veículo da plataforma.',
             icon = 'fas fa-right-from-bracket',
-            disabled = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.01),
+            disabled = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.05),
             onSelect = function()
                 VRS.RemoveFromLift(shopId, liftIndex, vehicle)
             end,
@@ -160,16 +176,26 @@ function VRS.PlaceOnLift(shopId, liftIndex)
     local coords, heading = VRS.GetLiftWorldCoords(shopId, liftIndex, Config.Lift.MinHeight or 0.0)
     if not coords then return end
 
+    -- Remover motorista se necessário
     local driver = GetPedInVehicleSeat(vehicle, -1)
     if driver and driver ~= 0 then
         TaskLeaveVehicle(driver, vehicle, 0)
-        Wait(1500)
+        Wait(2000)
     end
 
+    -- Posicionar veículo na plataforma
+    requestControl(vehicle)
     SetEntityCoords(vehicle, coords.x, coords.y, coords.z, false, false, false, false)
     SetEntityHeading(vehicle, heading)
     FreezeEntityPosition(vehicle, true)
     SetVehicleEngineOn(vehicle, false, true, true)
+
+    -- Desabilitar colisão com plataforma
+    local liftData = VRS.GetLiftPropData(shopId, liftIndex)
+    if liftData and liftData.platform and DoesEntityExist(liftData.platform) then
+        SetEntityNoCollisionEntity(liftData.platform, vehicle, true)
+        SetEntityNoCollisionEntity(vehicle, liftData.platform, true)
+    end
 
     local netId = NetworkGetNetworkIdFromEntity(vehicle)
     local result = lib.callback.await('vrs_mechanic:server:placeVehicleOnLift', false, shopId, liftIndex, netId, plate)
@@ -181,6 +207,7 @@ function VRS.PlaceOnLift(shopId, liftIndex)
             no_access = VRS.L.notify.no_permission,
             not_on_duty = VRS.L.repair.not_on_duty,
             too_far = 'O veículo saiu da área válida do elevador.',
+            lift_busy = 'Elevador em movimento. Aguarde.',
         }
         lib.notify({ title = 'Elevador', description = messages[reason] or 'Não foi possível posicionar o veículo.', type = 'error' })
         return
@@ -206,11 +233,13 @@ function VRS.RemoveFromLift(shopId, liftIndex, vehicle)
             lift_not_lowered = 'Abaixe totalmente o elevador antes de retirar o veículo.',
             no_access = VRS.L.notify.no_permission,
             not_on_duty = VRS.L.repair.not_on_duty,
+            lift_busy = 'Elevador em movimento. Aguarde.',
         }
         lib.notify({ title = 'Elevador', description = messages[reason] or 'Não foi possível retirar o veículo.', type = 'error' })
         return
     end
 
+    requestControl(vehicle)
     FreezeEntityPosition(vehicle, false)
 
     local lift = Config.Shops[shopId].lifts[liftIndex]

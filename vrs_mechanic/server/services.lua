@@ -16,15 +16,7 @@ local function getActiveServiceKey(plate, netId)
     return ('net:%s'):format(netId or 'unknown')
 end
 
-function VRS.FindLiftByVehicle(plate, netId)
-    for key, state in pairs(VRS.LiftStates or {}) do
-        if state and state.vehicleNetId and ((netId and state.vehicleNetId == netId) or (plate and state.plate == plate)) then
-            return key, state
-        end
-    end
-
-    return nil, nil
-end
+-- VRS.FindLiftByVehicle está definido em server/lifts.lua
 
 function VRS.ValidateServiceContext(source, serviceType, serviceKey, data)
     data = data or {}

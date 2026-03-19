@@ -392,7 +392,150 @@ qs('#send-bill-btn').addEventListener('click', async () => {
 });
 
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && state.open) {
-        nui('close');
+    if (event.key === 'Escape') {
+        if (liftState.open) {
+            nui('closeLiftPanel');
+        } else if (state.open) {
+            nui('close');
+        }
+    }
+});
+
+/* ============================================ */
+/* MINI PAINEL DO ELEVADOR                     */
+/* ============================================ */
+
+const liftState = {
+    open: false,
+    height: 0,
+    maxHeight: 2.1,
+    minHeight: 0,
+    hasVehicle: false,
+    vehiclePlate: null,
+    moving: false,
+    direction: null,
+    heightLabel: 'Base',
+    liftIndex: 1,
+    shopLabel: 'Oficina',
+    levels: [],
+};
+
+function updateLiftUI() {
+    const panel = qs('#lift-panel');
+    if (!liftState.open) {
+        panel.classList.add('hidden');
+        return;
+    }
+    panel.classList.remove('hidden');
+
+    // Título
+    qs('#lift-title').textContent = `ELEVADOR #${liftState.liftIndex}`;
+    qs('#lift-shop-label').textContent = liftState.shopLabel;
+
+    // LED
+    const led = qs('#lift-led');
+    led.className = 'lift-led';
+    if (liftState.moving) {
+        led.classList.add('moving');
+    } else if (!liftState.hasVehicle) {
+        led.classList.add('empty');
+    }
+
+    // Status
+    qs('#lift-vehicle-status').textContent = liftState.hasVehicle
+        ? (liftState.vehiclePlate || 'No elevador')
+        : 'Sem veículo';
+
+    qs('#lift-height-display').textContent = `${liftState.height.toFixed(2)}m`;
+
+    // Barra de altura
+    const range = liftState.maxHeight - liftState.minHeight;
+    const percent = range > 0 ? ((liftState.height - liftState.minHeight) / range * 100) : 0;
+    qs('#lift-height-fill').style.width = `${Math.min(percent, 100)}%`;
+    qs('#lift-height-label').textContent = liftState.heightLabel;
+
+    // Botões ativos
+    const btnUp = qs('#lift-btn-up');
+    const btnDown = qs('#lift-btn-down');
+    const btnStop = qs('#lift-btn-stop');
+
+    btnUp.classList.toggle('active', liftState.moving && liftState.direction === 'up');
+    btnDown.classList.toggle('active', liftState.moving && liftState.direction === 'down');
+    btnStop.classList.toggle('active', false);
+
+    // Indicador de movimento
+    const indicator = qs('#lift-movement-indicator');
+    if (liftState.moving) {
+        indicator.classList.remove('hidden');
+        qs('#lift-movement-text').textContent = liftState.direction === 'up'
+            ? 'Elevador subindo...'
+            : 'Elevador descendo...';
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
+function renderLiftPresets() {
+    const grid = qs('#lift-presets-grid');
+    if (!liftState.levels || !liftState.levels.length) {
+        grid.innerHTML = '';
+        return;
+    }
+
+    grid.innerHTML = liftState.levels.map((level) => {
+        const isCurrent = Math.abs(liftState.height - level.zOffset) < 0.08;
+        return `<button class="lift-preset-btn ${isCurrent ? 'current' : ''}"
+                    onclick="window.liftPreset(${level.zOffset})"
+                    title="${level.label} (${level.zOffset.toFixed(2)}m)">
+                    ${level.label}
+                </button>`;
+    }).join('');
+}
+
+window.liftPreset = (height) => {
+    nui('liftAction', { action: 'preset', height });
+};
+
+// Lift panel event listeners
+qs('#lift-btn-up').addEventListener('click', () => nui('liftAction', { action: 'up' }));
+qs('#lift-btn-down').addEventListener('click', () => nui('liftAction', { action: 'down' }));
+qs('#lift-btn-stop').addEventListener('click', () => nui('liftAction', { action: 'stop' }));
+qs('#lift-close-btn').addEventListener('click', () => nui('closeLiftPanel'));
+
+// Handle lift panel messages
+window.addEventListener('message', (event) => {
+    const msg = event.data || {};
+
+    if (msg.action === 'openLiftPanel') {
+        liftState.open = true;
+        liftState.height = msg.height || 0;
+        liftState.maxHeight = msg.maxHeight || 2.1;
+        liftState.minHeight = msg.minHeight || 0;
+        liftState.hasVehicle = msg.hasVehicle || false;
+        liftState.vehiclePlate = msg.vehiclePlate;
+        liftState.moving = msg.moving || false;
+        liftState.direction = msg.direction;
+        liftState.heightLabel = msg.heightLabel || 'Base';
+        liftState.liftIndex = msg.liftIndex || 1;
+        liftState.shopLabel = msg.shopLabel || 'Oficina';
+        liftState.levels = msg.levels || [];
+        updateLiftUI();
+        renderLiftPresets();
+    }
+
+    if (msg.action === 'updateLiftPanel') {
+        liftState.height = msg.height !== undefined ? msg.height : liftState.height;
+        liftState.hasVehicle = msg.hasVehicle !== undefined ? msg.hasVehicle : liftState.hasVehicle;
+        liftState.vehiclePlate = msg.vehiclePlate !== undefined ? msg.vehiclePlate : liftState.vehiclePlate;
+        liftState.moving = msg.moving !== undefined ? msg.moving : liftState.moving;
+        liftState.direction = msg.direction !== undefined ? msg.direction : liftState.direction;
+        liftState.heightLabel = msg.heightLabel !== undefined ? msg.heightLabel : liftState.heightLabel;
+        updateLiftUI();
+        renderLiftPresets();
+    }
+
+    if (msg.action === 'closeLiftPanel') {
+        liftState.open = false;
+        updateLiftUI();
     }
 });

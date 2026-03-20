@@ -55,6 +55,19 @@ local function requestControl(entity)
     return NetworkHasControlOfEntity(entity)
 end
 
+local function fetchLiftLayoutsSafe()
+    local ok, response = pcall(function()
+        return lib.callback.await('vrs_mechanic:server:getLiftLayouts', false)
+    end)
+
+    if not ok then
+        print(('[vrs_mechanic] Lift admin callback indisponível no client: %s'):format(response))
+        return nil
+    end
+
+    return response
+end
+
 -- ============================================================
 -- SPAWN DE PROPS DO ELEVADOR
 -- ============================================================
@@ -144,6 +157,72 @@ local function destroyLiftProps(liftKey)
     end
 
     spawnedLifts[liftKey] = nil
+end
+
+local function destroyAllLiftProps()
+    for liftKey in pairs(spawnedLifts) do
+        destroyLiftProps(liftKey)
+    end
+end
+
+local function spawnAllLiftProps()
+    for shopId, shop in pairs(Config.Shops) do
+        if shop.lifts then
+            for liftIndex in ipairs(shop.lifts) do
+                spawnLiftProps(shopId, liftIndex)
+            end
+        end
+    end
+end
+
+function VRS.RebuildLiftProps(refreshStates)
+    local validKeys = {}
+    for shopId, shop in pairs(Config.Shops) do
+        for liftIndex in ipairs(shop.lifts or {}) do
+            validKeys[getLiftKey(shopId, liftIndex)] = true
+        end
+    end
+
+    for liftKey in pairs(VRS.LiftState or {}) do
+        if not validKeys[liftKey] then
+            VRS.LiftState[liftKey] = nil
+            VRS.OnLift[liftKey] = nil
+            attachedVehicles[liftKey] = nil
+            liftMovement[liftKey] = nil
+        end
+    end
+
+    destroyAllLiftProps()
+    spawnAllLiftProps()
+
+    if refreshStates then
+        CreateThread(function()
+            Wait(200)
+            for shopId, shop in pairs(Config.Shops) do
+                if shop.lifts then
+                    for liftIndex in ipairs(shop.lifts) do
+                        VRS.RefreshLiftState(shopId, liftIndex)
+                    end
+                end
+            end
+        end)
+    end
+end
+
+function VRS.ApplyLiftLayouts(layouts)
+    if type(layouts) ~= 'table' then return end
+
+    for shopId, lifts in pairs(layouts) do
+        if Config.Shops[shopId] then
+            Config.Shops[shopId].lifts = lifts or {}
+        end
+    end
+
+    if VRS.RebuildLiftTargets then
+        VRS.RebuildLiftTargets()
+    end
+
+    VRS.RebuildLiftProps(true)
 end
 
 -- ============================================================
@@ -357,6 +436,10 @@ end
 
 RegisterNetEvent('vrs_mechanic:client:syncLiftState', function(shopId, liftIndex, state)
     VRS.ApplyLiftState(shopId, liftIndex, state)
+end)
+
+RegisterNetEvent('vrs_mechanic:client:syncLiftLayouts', function(layouts)
+    VRS.ApplyLiftLayouts(layouts)
 end)
 
 RegisterNetEvent('vrs_mechanic:client:liftMovement', function(shopId, liftIndex, direction)
@@ -610,15 +693,16 @@ end)
 -- ============================================================
 
 CreateThread(function()
-    Wait(2000)
-    for shopId, shop in pairs(Config.Shops) do
-        if shop.lifts then
-            for i in ipairs(shop.lifts) do
-                spawnLiftProps(shopId, i)
-                VRS.RefreshLiftState(shopId, i)
-            end
-        end
+    Wait(1500)
+
+    local response = fetchLiftLayoutsSafe()
+    if response and response.layouts then
+        VRS.ApplyLiftLayouts(response.layouts)
+    else
+        VRS.RebuildLiftProps(true)
     end
+
+    TriggerServerEvent('vrs_mechanic:server:requestLiftLayouts')
 end)
 
 -- ============================================================

@@ -437,3 +437,61 @@ end)
 -- ============================================================
 
 CreateThread(loadSavedHeights)
+
+
+if not VRS.LiftAdminAvailable then
+    lib.callback.register('vrs_mechanic:server:getLiftLayouts', function(source)
+        local layouts = {}
+        local shops = {}
+
+        for shopId, shop in pairs(Config.Shops) do
+            layouts[shopId] = {}
+            for index, lift in ipairs(shop.lifts or {}) do
+                layouts[shopId][#layouts[shopId] + 1] = {
+                    id = lift.id or ('%s_static_%d'):format(shopId, index),
+                    model = lift.model or Config.Lift.DefaultModelName or 'standard_lift',
+                    ownerJob = lift.ownerJob or shop.job,
+                    shopId = shopId,
+                    category = lift.category or shopId,
+                    source = lift.source or 'static',
+                    staticIndex = lift.staticIndex or index,
+                    length = lift.length,
+                    width = lift.width,
+                    controlPanel = lift.controlPanel and {
+                        x = lift.controlPanel.x,
+                        y = lift.controlPanel.y,
+                        z = lift.controlPanel.z,
+                        w = lift.controlPanel.w,
+                    } or nil,
+                    coords = {
+                        x = lift.coords.x,
+                        y = lift.coords.y,
+                        z = lift.coords.z,
+                        w = lift.coords.w,
+                    },
+                    metadata = lift.metadata or {},
+                }
+            end
+
+            if VRS.CanManageLifts and VRS.CanManageLifts(source, shopId) then
+                shops[#shops + 1] = {
+                    shopId = shopId,
+                    label = shop.label,
+                    job = shop.job,
+                    type = shop.type,
+                    liftCount = #(shop.lifts or {}),
+                }
+            end
+        end
+
+        return { layouts = layouts, shops = shops, allowed = #shops > 0 }
+    end)
+
+    lib.callback.register('vrs_mechanic:server:saveLiftLayout', function()
+        return { success = false, reason = 'admin_unavailable' }
+    end)
+
+    lib.callback.register('vrs_mechanic:server:deleteLiftLayout', function()
+        return { success = false, reason = 'admin_unavailable' }
+    end)
+end

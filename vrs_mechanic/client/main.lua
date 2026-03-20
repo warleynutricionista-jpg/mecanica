@@ -14,6 +14,15 @@ VRS.InShopZone = false
 VRS.OnLift = {}         -- { [liftIndex] = netId }
 VRS.LiftState = {}
 
+
+VRS.OpenLiftAdminMenu = VRS.OpenLiftAdminMenu or function()
+    lib.notify({ title = 'Elevador', description = 'Gerenciamento de elevadores indisponível no momento.', type = 'error' })
+end
+
+VRS.ApplyLiftLayouts = VRS.ApplyLiftLayouts or function() end
+VRS.RebuildLiftTargets = VRS.RebuildLiftTargets or function() end
+VRS.FetchLiftAdminData = VRS.FetchLiftAdminData or function() return nil end
+
 -- ============================================================
 -- SYNC DE STATUS
 -- ============================================================

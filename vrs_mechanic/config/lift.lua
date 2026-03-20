@@ -68,6 +68,26 @@ Config.Lift.levels = {
 -- PERMISSÕES
 -- ============================================================
 Config.Lift.requireDuty = true
+Config.Lift.AdminAce = 'group.admin' -- ACE opcional para permitir gestão total dos elevadores
+Config.Lift.AdminRequireDuty = true
+
+-- ============================================================
+-- ADMIN / EDIÇÃO IN-GAME
+-- ============================================================
+Config.Lift.DefaultModelName = 'standard_lift'
+Config.Lift.LayoutFile = 'lift_layouts.json'
+Config.Lift.AdminCommand = 'liftadmin'
+Config.Lift.MinSpacing = 4.0
+Config.Lift.ValidationDistanceFromShop = 35.0
+Config.Lift.MaxGroundDelta = 0.45
+Config.Lift.Editor = {
+    moveSpeed = 0.03,
+    fineMoveSpeed = 0.01,
+    verticalSpeed = 0.02,
+    rotationSpeed = 1.5,
+    previewAlpha = 170,
+    refreshInterval = 150,
+}
 
 -- ============================================================
 -- PERSISTÊNCIA

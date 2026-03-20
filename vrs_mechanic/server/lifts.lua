@@ -44,7 +44,7 @@ local function isVehicleWithinLiftBounds(shopId, liftIndex, vehicle)
         getLiftMetrics(shopId, liftIndex),
         GetEntityCoords(vehicle),
         GetEntityHeading(vehicle),
-        GetVehicleClass(vehicle)
+        nil
     )
 end
 

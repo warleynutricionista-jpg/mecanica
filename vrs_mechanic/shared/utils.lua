@@ -100,3 +100,88 @@ function VRS.GetItemLabel(itemName)
     return itemName
 end
 
+
+
+--- Faz deep copy simples de tabelas
+---@param value any
+---@return any
+function VRS.DeepCopy(value)
+    if type(value) ~= 'table' then return value end
+
+    local copy = {}
+    for key, entry in pairs(value) do
+        copy[key] = VRS.DeepCopy(entry)
+    end
+    return copy
+end
+
+--- Resolve um model/hash para hash numérico
+---@param model string|number|nil
+---@return number|nil
+function VRS.ResolveModelHash(model)
+    if not model then return nil end
+    if type(model) == 'number' then return model end
+    return joaat(model)
+end
+
+local function copyVec(value, fallback)
+    local source = value or fallback
+    if not source then return nil end
+    return vec3(source.x or 0.0, source.y or 0.0, source.z or 0.0)
+end
+
+--- Retorna o profile configurado de um modelo de elevador
+---@param liftOrModel table|string|number
+---@return table
+function VRS.GetLiftModelProfile(liftOrModel)
+    local model = type(liftOrModel) == 'table' and (liftOrModel.model or liftOrModel.modelName or liftOrModel.platformModel) or liftOrModel
+    local defaults = VRS.DeepCopy(Config.Lift.ModelDefaults or {})
+    local profiles = Config.Lift.Models or {}
+
+    if type(model) == 'string' and profiles[model] then
+        for key, value in pairs(profiles[model]) do
+            defaults[key] = VRS.DeepCopy(value)
+        end
+        defaults.model = model
+        return defaults
+    end
+
+    local hash = VRS.ResolveModelHash(model)
+    if hash then
+        for profileName, profile in pairs(profiles) do
+            local profileHash = VRS.ResolveModelHash(profile.model or profileName)
+            if profileHash == hash then
+                for key, value in pairs(profile) do
+                    defaults[key] = VRS.DeepCopy(value)
+                end
+                defaults.model = profile.model or profileName
+                return defaults
+            end
+        end
+    end
+
+    defaults.model = type(model) == 'string' and model or defaults.model
+    return defaults
+end
+
+--- Retorna métricas consolidadas do elevador a partir do entry + profile
+---@param lift table
+---@return table
+function VRS.GetLiftMetrics(lift)
+    local profile = VRS.GetLiftModelProfile(lift)
+    return {
+        profile = profile,
+        minHeight = tonumber(lift and lift.minHeight or profile.minHeight) or Config.Lift.MinHeight or 0.0,
+        maxHeight = tonumber(lift and lift.maxHeight or profile.maxHeight) or Config.Lift.MaxHeight or 2.1,
+        vehicleOffset = copyVec(lift and lift.vehicleOffset, profile.vehicleOffset or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36)) or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36),
+        platformOffset = copyVec(lift and lift.platformOffset, profile.platformOffset or vec3(0.0, 0.0, 0.0)) or vec3(0.0, 0.0, 0.0),
+        interactionOffset = copyVec(lift and lift.interactionOffset, profile.interactionOffset or Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0)) or vec3(1.9, 0.0, 0.0),
+        length = tonumber(lift and lift.length or profile.length) or 5.0,
+        width = tonumber(lift and lift.width or profile.width) or 2.5,
+        family = lift and lift.family or profile.family or 'generic',
+        sourceType = lift and lift.sourceType or profile.sourceType or 'spawned',
+        useExistingEntity = lift and lift.useExistingEntity ~= nil and lift.useExistingEntity or profile.useExistingEntity or false,
+        supportedClasses = lift and lift.supportedClasses or profile.supportedClasses,
+        profileName = profile.model or 'default',
+    }
+end

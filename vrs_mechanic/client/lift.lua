@@ -20,7 +20,8 @@ local function roundHeight(value)
 end
 
 local function prepareModel(model)
-    local hash = type(model) == 'string' and joaat(model) or model
+    local hash = VRS.ResolveModelHash(model, 'client.lift.prepareModel')
+    if not hash then return nil end
     if HasModelLoaded(hash) then return hash end
     RequestModel(hash)
     local timeout = GetGameTimer() + 5000
@@ -55,13 +56,89 @@ local function requestControl(entity)
     return NetworkHasControlOfEntity(entity)
 end
 
+local function fetchLiftLayoutsSafe()
+    local ok, response = pcall(function()
+        return lib.callback.await('vrs_mechanic:server:getLiftLayouts', false)
+    end)
+
+    if not ok then
+        print(('[vrs_mechanic] Lift admin callback indisponível no client: %s'):format(response))
+        return nil
+    end
+
+    return response
+end
+
 -- ============================================================
--- SPAWN DE PROPS DO ELEVADOR
+-- SPAWN / DETECÇÃO UNIVERSAL DE ELEVADORES
 -- ============================================================
 
-local function spawnPoles(platformEntity, heading)
+local function rotateOffset(offset, heading)
+    local radians = math.rad(heading or 0.0)
+    local cosHeading = math.cos(radians)
+    local sinHeading = math.sin(radians)
+
+    return vec3(
+        (offset.x * cosHeading) - (offset.y * sinHeading),
+        (offset.x * sinHeading) + (offset.y * cosHeading),
+        offset.z or 0.0
+    )
+end
+
+local function getLiftEntry(shopId, liftIndex)
+    local shop = Config.Shops[shopId]
+    return shop and shop.lifts and shop.lifts[liftIndex] or nil
+end
+
+local function getLiftMetrics(shopId, liftIndex)
+    return VRS.GetLiftMetrics(getLiftEntry(shopId, liftIndex) or {})
+end
+
+local function getLiftHashMap()
+    local results = {}
+    for profileName, profile in pairs(Config.Lift.Models or {}) do
+        if profileName ~= 'standard_lift' and (profile.useExistingEntity or profile.sourceType == 'world' or profile.sourceType == 'world_or_spawned') then
+            local hash = VRS.ResolveModelHash(profile.model or profileName)
+            if hash then
+                results[hash] = profile.model or profileName
+            end
+        end
+    end
+    return results
+end
+
+local function serializeVec3(value)
+    if not value then return nil end
+    return { x = value.x, y = value.y, z = value.z }
+end
+
+local function findLiftEntity(lift, metrics)
+    if not metrics.useExistingEntity then return nil end
+
+    local targetCoords = vec3(lift.coords.x, lift.coords.y, lift.coords.z)
+    local heading = lift.coords.w or 0.0
+    local entityOffset = rotateOffset(metrics.platformOffset or vec3(0.0, 0.0, 0.0), heading)
+    local expectedEntityCoords = targetCoords - entityOffset
+    local modelHash = VRS.ResolveModelHash(lift.model or metrics.profileName)
+    if not modelHash then return nil end
+
+    local bestEntity, bestDist = nil, 4.0
+    for _, entity in ipairs(GetGamePool('CObject')) do
+        if DoesEntityExist(entity) and GetEntityModel(entity) == modelHash then
+            local dist = #(GetEntityCoords(entity) - expectedEntityCoords)
+            if dist <= bestDist then
+                bestEntity = entity
+                bestDist = dist
+            end
+        end
+    end
+
+    return bestEntity
+end
+
+local function spawnPoles(platformEntity, heading, profile)
     local poles = {}
-    local poleModel = Config.Lift.PoleModel
+    local poleModel = profile.poleModel or Config.Lift.PoleModel
     local poleZ = Config.Lift.PoleZOffset or -0.30
     local offsets = {
         vec3(1.43, -2.88, poleZ),
@@ -82,35 +159,158 @@ local function spawnPoles(platformEntity, heading)
     return poles
 end
 
-local function spawnElecBox(platformEntity, heading)
-    local offset = Config.Lift.ElecBoxOffset or vec3(0.0, -3.3, -0.7)
+local function spawnElecBox(platformEntity, heading, profile)
+    local offset = profile.elecBoxOffset or Config.Lift.ElecBoxOffset or vec3(0.0, -3.3, -0.7)
     local worldCoords = GetOffsetFromEntityInWorldCoords(platformEntity, offset.x, offset.y, offset.z)
-    return createProp(Config.Lift.ElecBoxModel, worldCoords.x, worldCoords.y, worldCoords.z, heading)
+    return createProp(profile.elecBoxModel or Config.Lift.ElecBoxModel, worldCoords.x, worldCoords.y, worldCoords.z, heading)
+end
+
+local function estimateLiftSize(entity, metrics)
+    local minDim, maxDim = GetModelDimensions(GetEntityModel(entity))
+    local length = metrics.length
+    local width = metrics.width
+
+    if (Config.Lift.ModelDefaults and Config.Lift.ModelDefaults.fallbackToModelDimensions) or metrics.profile.fallbackToModelDimensions then
+        length = math.max(length or 0.0, math.abs(maxDim.y - minDim.y))
+        width = math.max(width or 0.0, math.abs(maxDim.x - minDim.x))
+    end
+
+    return length > 0.0 and length or 5.0, width > 0.0 and width or 2.5
+end
+
+function VRS.GetNearestCompatibleWorldLift(maxDistance, shopId)
+    local hashMap = getLiftHashMap()
+    local pedCoords = GetEntityCoords(cache.ped)
+    local best, bestDist = nil, maxDistance or 10.0
+
+    for _, entity in ipairs(GetGamePool('CObject')) do
+        local modelName = hashMap[GetEntityModel(entity)]
+        if modelName then
+            local entityCoords = GetEntityCoords(entity)
+            local dist = #(pedCoords - entityCoords)
+            if dist <= bestDist then
+                if not shopId or VRS.IsPointInsideShopZone(shopId, entityCoords) then
+                    local profile = VRS.GetLiftModelProfile(modelName)
+                    local heading = GetEntityHeading(entity)
+                    local platformOffset = rotateOffset(profile.platformOffset or vec3(0.0, 0.0, 0.0), heading)
+                    local platformCoords = entityCoords + platformOffset
+                    local length, width = estimateLiftSize(entity, VRS.GetLiftMetrics({ model = modelName }))
+                    best = {
+                        id = ('%s:%d:%.2f:%.2f:%.2f'):format(modelName, GetEntityModel(entity), platformCoords.x, platformCoords.y, platformCoords.z),
+                        entity = entity,
+                        model = modelName,
+                        coords = vec4(platformCoords.x, platformCoords.y, platformCoords.z, heading),
+                        length = length,
+                        width = width,
+                        minHeight = profile.minHeight,
+                        maxHeight = profile.maxHeight,
+                        platformOffset = serializeVec3(profile.platformOffset or vec3(0.0, 0.0, 0.0)),
+                        vehicleOffset = serializeVec3(profile.vehicleOffset or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36)),
+                        interactionOffset = serializeVec3(profile.interactionOffset or Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0)),
+                        metadata = {
+                            modelHash = GetEntityModel(entity),
+                            source = 'world_scan',
+                        },
+                    }
+                    bestDist = dist
+                end
+            end
+        end
+    end
+
+    return best, bestDist
+end
+
+function VRS.ScanWorldLifts(shopId)
+    if not Config.Lift.WorldDetection or not Config.Lift.WorldDetection.enabled then return end
+    local shop = Config.Shops[shopId]
+    if not shop or not shop.zones or not shop.zones.main then return end
+
+    local hashMap = getLiftHashMap()
+    local found = {}
+    local zoneCoords = shop.zones.main.coords
+    local maxDistance = Config.Lift.WorldDetection.maxDistanceFromShop or 45.0
+
+    for _, entity in ipairs(GetGamePool('CObject')) do
+        local modelName = hashMap[GetEntityModel(entity)]
+        if modelName then
+            local entityCoords = GetEntityCoords(entity)
+            if #(entityCoords - zoneCoords) <= maxDistance then
+                local duplicate = false
+                for _, existing in ipairs(found) do
+                    local dist = #(vec3(existing.coords.x, existing.coords.y, existing.coords.z) - entityCoords)
+                    if dist <= (Config.Lift.WorldDetection.dedupeDistance or 1.5) and existing.model == modelName then
+                        duplicate = true
+                        break
+                    end
+                end
+
+                if not duplicate then
+                    local profile = VRS.GetLiftModelProfile(modelName)
+                    local metrics = VRS.GetLiftMetrics({ model = modelName })
+                    local heading = GetEntityHeading(entity)
+                    local platformOffset = rotateOffset(profile.platformOffset or vec3(0.0, 0.0, 0.0), heading)
+                    local platformCoords = entityCoords + platformOffset
+                    local length, width = estimateLiftSize(entity, metrics)
+                    found[#found + 1] = {
+                        model = modelName,
+                        coords = { x = platformCoords.x, y = platformCoords.y, z = platformCoords.z, w = heading },
+                        length = length,
+                        width = width,
+                        minHeight = profile.minHeight,
+                        maxHeight = profile.maxHeight,
+                        platformOffset = serializeVec3(profile.platformOffset or vec3(0.0, 0.0, 0.0)),
+                        vehicleOffset = serializeVec3(profile.vehicleOffset or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36)),
+                        interactionOffset = serializeVec3(profile.interactionOffset or Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0)),
+                        metadata = { modelHash = GetEntityModel(entity), discovered = true },
+                    }
+                end
+            end
+        end
+    end
+
+    TriggerServerEvent('vrs_mechanic:server:registerWorldLifts', shopId, found)
+    return found
 end
 
 local function spawnLiftProps(shopId, liftIndex)
     local liftKey = getLiftKey(shopId, liftIndex)
     if spawnedLifts[liftKey] then return spawnedLifts[liftKey] end
 
-    local shop = Config.Shops[shopId]
-    local lift = shop and shop.lifts and shop.lifts[liftIndex]
+    local lift = getLiftEntry(shopId, liftIndex)
     if not lift then return nil end
 
     local x, y, z = lift.coords.x, lift.coords.y, lift.coords.z
     local heading = lift.coords.w or 0.0
-
-    local platform = createProp(Config.Lift.PlatformModel, x, y, z, heading)
-    if not platform or platform == 0 then return nil end
-
+    local metrics = getLiftMetrics(shopId, liftIndex)
+    local profile = metrics.profile
+    local platform = nil
     local poles = {}
     local elecbox = nil
+    local spawned = false
 
-    if Config.Lift.SpawnPoles then
-        poles = spawnPoles(platform, heading)
-    end
+    if profile.sourceType == 'spawned_composite' or lift.model == 'standard_lift' then
+        platform = createProp(profile.platformModel or Config.Lift.PlatformModel, x, y, z, heading)
+        if not platform or platform == 0 then return nil end
+        spawned = true
 
-    if Config.Lift.SpawnElecBox then
-        elecbox = spawnElecBox(platform, heading)
+        if profile.spawnPoles ~= false and Config.Lift.SpawnPoles then
+            poles = spawnPoles(platform, heading, profile)
+        end
+
+        if profile.spawnElecBox ~= false and Config.Lift.SpawnElecBox then
+            elecbox = spawnElecBox(platform, heading, profile)
+        end
+    else
+        platform = findLiftEntity(lift, metrics)
+        if not platform and not metrics.useExistingEntity then
+            local entityOffset = rotateOffset(metrics.platformOffset or vec3(0.0, 0.0, 0.0), heading)
+            local spawnCoords = vec3(x, y, z) - entityOffset
+            platform = createProp(lift.model or profile.model, spawnCoords.x, spawnCoords.y, spawnCoords.z, heading)
+            spawned = platform ~= nil
+        end
+
+        if not platform or platform == 0 then return nil end
     end
 
     spawnedLifts[liftKey] = {
@@ -120,6 +320,11 @@ local function spawnLiftProps(shopId, liftIndex)
         baseZ = z,
         heading = heading,
         baseCoords = vec3(x, y, z),
+        entityOffset = metrics.platformOffset or vec3(0.0, 0.0, 0.0),
+        vehicleOffset = metrics.vehicleOffset or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36),
+        interactionOffset = metrics.interactionOffset or Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0),
+        metrics = metrics,
+        spawned = spawned,
     }
 
     return spawnedLifts[liftKey]
@@ -129,7 +334,7 @@ local function destroyLiftProps(liftKey)
     local data = spawnedLifts[liftKey]
     if not data then return end
 
-    if data.platform and DoesEntityExist(data.platform) then
+    if data.spawned and data.platform and DoesEntityExist(data.platform) then
         DeleteEntity(data.platform)
     end
 
@@ -146,6 +351,72 @@ local function destroyLiftProps(liftKey)
     spawnedLifts[liftKey] = nil
 end
 
+local function destroyAllLiftProps()
+    for liftKey in pairs(spawnedLifts) do
+        destroyLiftProps(liftKey)
+    end
+end
+
+local function spawnAllLiftProps()
+    for shopId, shop in pairs(Config.Shops) do
+        if shop.lifts then
+            for liftIndex in ipairs(shop.lifts) do
+                spawnLiftProps(shopId, liftIndex)
+            end
+        end
+    end
+end
+
+function VRS.RebuildLiftProps(refreshStates)
+    local validKeys = {}
+    for shopId, shop in pairs(Config.Shops) do
+        for liftIndex in ipairs(shop.lifts or {}) do
+            validKeys[getLiftKey(shopId, liftIndex)] = true
+        end
+    end
+
+    for liftKey in pairs(VRS.LiftState or {}) do
+        if not validKeys[liftKey] then
+            VRS.LiftState[liftKey] = nil
+            VRS.OnLift[liftKey] = nil
+            attachedVehicles[liftKey] = nil
+            liftMovement[liftKey] = nil
+        end
+    end
+
+    destroyAllLiftProps()
+    spawnAllLiftProps()
+
+    if refreshStates then
+        CreateThread(function()
+            Wait(200)
+            for shopId, shop in pairs(Config.Shops) do
+                if shop.lifts then
+                    for liftIndex in ipairs(shop.lifts) do
+                        VRS.RefreshLiftState(shopId, liftIndex)
+                    end
+                end
+            end
+        end)
+    end
+end
+
+function VRS.ApplyLiftLayouts(layouts)
+    if type(layouts) ~= 'table' then return end
+
+    for shopId, lifts in pairs(layouts) do
+        if Config.Shops[shopId] then
+            Config.Shops[shopId].lifts = lifts or {}
+        end
+    end
+
+    if VRS.RebuildLiftTargets then
+        VRS.RebuildLiftTargets()
+    end
+
+    VRS.RebuildLiftProps(true)
+end
+
 -- ============================================================
 -- FUNÇÕES DE PLATAFORMA
 -- ============================================================
@@ -154,16 +425,18 @@ local function getPlatformCurrentHeight(liftKey)
     local data = spawnedLifts[liftKey]
     if not data or not data.platform or not DoesEntityExist(data.platform) then return 0.0 end
     local currentZ = GetEntityCoords(data.platform).z
-    return roundHeight(currentZ - data.baseZ)
+    local platformZ = currentZ + (data.entityOffset and data.entityOffset.z or 0.0)
+    return roundHeight(platformZ - data.baseZ)
 end
 
 local function setPlatformHeight(liftKey, height)
     local data = spawnedLifts[liftKey]
     if not data or not data.platform or not DoesEntityExist(data.platform) then return end
 
-    local targetZ = data.baseZ + height
+    local targetPlatformZ = data.baseZ + height
+    local targetEntityCoords = vec3(data.baseCoords.x, data.baseCoords.y, targetPlatformZ) - (data.entityOffset or vec3(0.0, 0.0, 0.0))
     FreezeEntityPosition(data.platform, false)
-    SetEntityCoordsNoOffset(data.platform, data.baseCoords.x, data.baseCoords.y, targetZ, false, false, false)
+    SetEntityCoordsNoOffset(data.platform, targetEntityCoords.x, targetEntityCoords.y, targetEntityCoords.z, false, false, false)
     FreezeEntityPosition(data.platform, true)
 end
 
@@ -174,9 +447,10 @@ local function updateVehicleOnLift(liftKey, height)
     local data = spawnedLifts[liftKey]
     if not data then return end
 
-    local vehicleZ = data.baseZ + height + (Config.Lift.VehicleZOffset or 0.36)
+    local vehicleOffset = data.vehicleOffset or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36)
+    local vehicleCoords = vec3(data.baseCoords.x, data.baseCoords.y, data.baseZ + height) + vehicleOffset
     requestControl(vehicle)
-    SetEntityCoordsNoOffset(vehicle, data.baseCoords.x, data.baseCoords.y, vehicleZ, false, false, false)
+    SetEntityCoordsNoOffset(vehicle, vehicleCoords.x, vehicleCoords.y, vehicleCoords.z, false, false, false)
     SetEntityHeading(vehicle, data.heading)
     FreezeEntityPosition(vehicle, true)
     SetVehicleEngineOn(vehicle, false, true, true)
@@ -200,15 +474,18 @@ end
 function VRS.GetLiftWorldCoords(shopId, liftIndex, height)
     local baseCoords, heading = VRS.GetLiftBaseCoords(shopId, liftIndex)
     if not baseCoords then return nil end
-    local clampedHeight = math.min(math.max(roundHeight(height), Config.Lift.MinHeight or 0.0), Config.Lift.MaxHeight or 2.1)
-    local vehicleZ = baseCoords.z + clampedHeight + (Config.Lift.VehicleZOffset or 0.36)
-    return vec3(baseCoords.x, baseCoords.y, vehicleZ), heading
+    local metrics = getLiftMetrics(shopId, liftIndex)
+    local clampedHeight = math.min(math.max(roundHeight(height), metrics.minHeight), metrics.maxHeight)
+    local vehicleCoords = vec3(baseCoords.x, baseCoords.y, baseCoords.z + clampedHeight) + metrics.vehicleOffset
+    return vehicleCoords, heading
 end
 
-function VRS.GetLiftHeightLabel(height)
+function VRS.GetLiftHeightLabel(height, shopId, liftIndex)
     height = roundHeight(height)
+    local metrics = (shopId and liftIndex) and getLiftMetrics(shopId, liftIndex) or nil
     local presets = Config.Lift.DefaultWorkHeights or {}
-    if math.abs(height - (Config.Lift.MinHeight or 0.0)) <= 0.05 then
+    local minHeight = metrics and metrics.minHeight or (Config.Lift.MinHeight or 0.0)
+    if math.abs(height - minHeight) <= 0.05 then
         return 'Base'
     end
     if presets.engine and math.abs(height - presets.engine) <= 0.08 then
@@ -342,7 +619,7 @@ function VRS.ApplyLiftState(shopId, liftIndex, state)
     end
 
     -- Aplicar altura na plataforma e veículo
-    local height = state.height or Config.Lift.MinHeight or 0.0
+    local height = state.height or state.minHeight or Config.Lift.MinHeight or 0.0
     setPlatformHeight(liftKey, height)
     updateVehicleOnLift(liftKey, height)
 end
@@ -357,6 +634,10 @@ end
 
 RegisterNetEvent('vrs_mechanic:client:syncLiftState', function(shopId, liftIndex, state)
     VRS.ApplyLiftState(shopId, liftIndex, state)
+end)
+
+RegisterNetEvent('vrs_mechanic:client:syncLiftLayouts', function(layouts)
+    VRS.ApplyLiftLayouts(layouts)
 end)
 
 RegisterNetEvent('vrs_mechanic:client:liftMovement', function(shopId, liftIndex, direction)
@@ -400,13 +681,13 @@ function VRS.OpenLiftPanel(shopId, liftIndex)
         shopLabel = shop and shop.label or 'Oficina',
         liftIndex = liftIndex,
         height = roundHeight(state.height or 0.0),
-        maxHeight = Config.Lift.MaxHeight or 2.1,
-        minHeight = Config.Lift.MinHeight or 0.0,
+        maxHeight = state.maxHeight or Config.Lift.MaxHeight or 2.1,
+        minHeight = state.minHeight or Config.Lift.MinHeight or 0.0,
         hasVehicle = state.vehicleNetId ~= nil,
         vehiclePlate = vehiclePlate or state.plate,
         moving = liftMovement[liftKey] ~= nil,
         direction = liftMovement[liftKey],
-        heightLabel = VRS.GetLiftHeightLabel(state.height or 0.0),
+        heightLabel = VRS.GetLiftHeightLabel(state.height or 0.0, shopId, liftIndex),
         levels = Config.Lift.levels,
     })
 
@@ -441,7 +722,7 @@ function VRS.UpdateLiftPanel()
         vehiclePlate = vehiclePlate or state.plate,
         moving = liftMovement[liftKey] ~= nil,
         direction = liftMovement[liftKey],
-        heightLabel = VRS.GetLiftHeightLabel(state.height or 0.0),
+        heightLabel = VRS.GetLiftHeightLabel(state.height or 0.0, shopId, liftIndex),
     })
 end
 
@@ -486,8 +767,8 @@ CreateThread(function()
             local data = spawnedLifts[liftKey]
             if data and data.platform and DoesEntityExist(data.platform) then
                 local currentHeight = getPlatformCurrentHeight(liftKey)
-                local maxH = Config.Lift.MaxHeight or 2.1
-                local minH = Config.Lift.MinHeight or 0.0
+                local maxH = (VRS.LiftState[liftKey] and VRS.LiftState[liftKey].maxHeight) or Config.Lift.MaxHeight or 2.1
+                local minH = (VRS.LiftState[liftKey] and VRS.LiftState[liftKey].minHeight) or Config.Lift.MinHeight or 0.0
                 local slowZone = Config.Lift.SlowZoneSize or 0.15
                 local newHeight = currentHeight
 
@@ -610,13 +891,20 @@ end)
 -- ============================================================
 
 CreateThread(function()
-    Wait(2000)
-    for shopId, shop in pairs(Config.Shops) do
-        if shop.lifts then
-            for i in ipairs(shop.lifts) do
-                spawnLiftProps(shopId, i)
-                VRS.RefreshLiftState(shopId, i)
-            end
+    Wait(1500)
+
+    local response = fetchLiftLayoutsSafe()
+    if response and response.layouts then
+        VRS.ApplyLiftLayouts(response.layouts)
+    else
+        VRS.RebuildLiftProps(true)
+    end
+
+    TriggerServerEvent('vrs_mechanic:server:requestLiftLayouts')
+
+    if Config.Lift.WorldDetection and Config.Lift.WorldDetection.discoverOnStart then
+        for shopId in pairs(Config.Shops) do
+            VRS.ScanWorldLifts(shopId)
         end
     end
 end)

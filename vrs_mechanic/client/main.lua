@@ -14,6 +14,15 @@ VRS.InShopZone = false
 VRS.OnLift = {}         -- { [liftIndex] = netId }
 VRS.LiftState = {}
 
+
+VRS.OpenLiftAdminMenu = VRS.OpenLiftAdminMenu or function()
+    lib.notify({ title = 'Elevador', description = 'Gerenciamento de elevadores indisponível no momento.', type = 'error' })
+end
+
+VRS.ApplyLiftLayouts = VRS.ApplyLiftLayouts or function() end
+VRS.RebuildLiftTargets = VRS.RebuildLiftTargets or function() end
+VRS.FetchLiftAdminData = VRS.FetchLiftAdminData or function() return nil end
+
 -- ============================================================
 -- SYNC DE STATUS
 -- ============================================================
@@ -162,6 +171,17 @@ function VRS.GetClosestVehicle(maxDist)
     end
 
     return closest, closestDist
+end
+
+--- Valida se um ponto está dentro da área principal da oficina
+---@param shopId string
+---@param coords vector3
+---@return boolean
+function VRS.IsPointInsideShopZone(shopId, coords)
+    local shop = Config.Shops[shopId]
+    local zone = shop and shop.zones and shop.zones.main
+    if not zone then return false end
+    return #(vec3(coords.x, coords.y, coords.z) - zone.coords) <= math.max(zone.size.x, zone.size.y)
 end
 
 --- Verifica se jogador tem o job de mecânico

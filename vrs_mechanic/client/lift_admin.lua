@@ -424,6 +424,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
         requestedModel = requestedModel or (existingLift and existingLift.model) or Config.Lift.DefaultModelName,
         heading = startHeading,
         baseCoords = startCoords,
+        zOffset = 0.0,
         valid = false,
         reason = 'Carregando validação...',
         lastValidation = 0,
@@ -493,6 +494,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
             editorState.finalCoords = finalCoords
             editorState.groundMode = groundMode
             editorState.manualGroundDelta = manualDelta
+            editorState.zOffset = manualDelta
 
             setPreviewTransform(editorState.preview, finalCoords, editorState.heading)
 

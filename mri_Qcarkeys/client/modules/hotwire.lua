@@ -1,5 +1,6 @@
 local VehicleKeys = require 'client.interface'
 local VehicleSecurity = require 'client.modules.vehicle_security'
+local VehicleIntegrations = require 'client.modules.vehicle_integrations'
 local Action = require 'client.modules.action_helper'
 
 local Hotwire = {
@@ -39,6 +40,8 @@ function Hotwire:HotwireHandler()
     if self.isHotwiring or VehicleKeys.currentVehicle == 0 or not VehicleKeys.isInDrivingSeat then return end
 
     local vehicle = VehicleKeys.currentVehicle
+    if not VehicleIntegrations:CanUseIgnition(vehicle, true) then return end
+
     local ok, payload = lib.callback.await('mm_carkeys:server:beginHotwire', false, NetworkGetNetworkIdFromEntity(vehicle))
     if not ok then
         local map = {

@@ -188,27 +188,79 @@ local function setPreviewTransform(preview, coords, heading)
 end
 
 local function drawEditorHelp(lines)
-    SetTextFont(4)
-    SetTextScale(0.33, 0.33)
-    SetTextColour(255, 255, 255, 220)
-    SetTextOutline()
+    if type(lines) ~= 'table' then return end
 
-    local y = 0.78
-    for _, line in ipairs(lines) do
-        BeginTextCommandDisplayText('STRING')
-        AddTextComponentSubstringPlayerName(line)
-        EndTextCommandDisplayText(0.015, y)
-        y = y + 0.022
+    local function drawBlock(x, y, width, rows, bgAlpha)
+        local lineHeight = 0.023
+        local padding = 0.006
+        local blockHeight = (#rows * lineHeight) + (padding * 2.0)
+        DrawRect(x + (width * 0.5), y + (blockHeight * 0.5), width, blockHeight, 10, 10, 14, bgAlpha or 170)
+
+        local drawY = y + padding
+        for _, row in ipairs(rows) do
+            SetTextFont(4)
+            SetTextScale(row.scale or 0.33, row.scale or 0.33)
+            SetTextColour(row.color and row.color[1] or 255, row.color and row.color[2] or 255, row.color and row.color[3] or 255, row.color and row.color[4] or 230)
+            SetTextOutline()
+            BeginTextCommandDisplayText('STRING')
+            AddTextComponentSubstringPlayerName(row.text or '')
+            EndTextCommandDisplayText(x + 0.008, drawY)
+            drawY = drawY + lineHeight
+        end
+    end
+
+    if lines.header and #lines.header > 0 then
+        drawBlock(0.018, 0.08, 0.44, lines.header, 180)
+    end
+
+    if lines.controls and #lines.controls > 0 then
+        drawBlock(0.018, 0.17, 0.44, lines.controls, 160)
+    end
+
+    if lines.footer and #lines.footer > 0 then
+        drawBlock(0.018, 0.86, 0.44, lines.footer, 180)
     end
 end
 
 local function getGroundZ(coords)
-    local probeZ = math.max(coords.z + 5.0, 100.0)
-    local found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, probeZ, false)
-    if not found then
-        found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, probeZ, true)
+    local sampleHeights = {
+        math.max((coords.z or 0.0) + 2.0, 50.0),
+        math.max((coords.z or 0.0) + 10.0, 150.0),
+        300.0,
+        700.0,
+        1200.0,
+    }
+
+    RequestCollisionAtCoord(coords.x, coords.y, coords.z)
+    for _ = 1, 10 do
+        Wait(0)
+        if HasCollisionLoadedAroundEntity(cache.ped) then
+            break
+        end
+        RequestCollisionAtCoord(coords.x, coords.y, coords.z)
     end
-    return found and groundZ or coords.z
+
+    for _, probeZ in ipairs(sampleHeights) do
+        local found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, probeZ, false)
+        if found then
+            return groundZ, 'ground'
+        end
+
+        found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, probeZ, true)
+        if found then
+            return groundZ, 'ground_water'
+        end
+    end
+
+    local rayStart = vec3(coords.x, coords.y, math.max((coords.z or 0.0) + 50.0, 400.0))
+    local rayEnd = vec3(coords.x, coords.y, (coords.z or 0.0) - 100.0)
+    local rayHandle = StartShapeTestRay(rayStart.x, rayStart.y, rayStart.z, rayEnd.x, rayEnd.y, rayEnd.z, 1, cache.ped, 7)
+    local _, hit, hitCoords = GetShapeTestResult(rayHandle)
+    if hit == 1 and hitCoords then
+        return hitCoords.z, 'raycast'
+    end
+
+    return coords.z, 'fallback'
 end
 
 local function getShopDistance(shopId, coords)
@@ -238,21 +290,9 @@ end
 local function getPlacementValidation(shopId, liftId, coords)
     local distanceLimit = Config.Lift.ValidationDistanceFromShop or 35.0
     local minSpacing = Config.Lift.MinSpacing or 4.0
-    local maxGroundDelta = Config.Lift.MaxGroundDelta or 0.45
-    local groundZ = getGroundZ(coords)
-    local verticalDelta = math.abs(coords.z - groundZ)
 
     if getShopDistance(shopId, coords) > distanceLimit then
         return false, ('Fora da área permitida da oficina (máx. %.1fm).'):format(distanceLimit)
-    end
-
-    if verticalDelta > maxGroundDelta then
-        return false, ('Altura desalinhada do chão (delta %.2f).'):format(verticalDelta)
-    end
-
-    local occupied = IsPositionOccupied(coords.x, coords.y, coords.z + 0.8, 1.2, false, false, false, false, true, 0, false)
-    if occupied then
-        return false, 'Local bloqueado por parede/objeto.'
     end
 
     local shop = Config.Shops[shopId]
@@ -367,8 +407,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
         startHeading = existingLift.coords.w or 0.0
     else
         local pedCoords = GetEntityCoords(cache.ped)
-        local groundZ = getGroundZ(pedCoords)
-        startCoords = vec3(pedCoords.x, pedCoords.y, groundZ)
+        startCoords = vec3(pedCoords.x, pedCoords.y, pedCoords.z)
         startHeading = GetEntityHeading(cache.ped)
     end
 
@@ -385,10 +424,10 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
         requestedModel = requestedModel or (existingLift and existingLift.model) or Config.Lift.DefaultModelName,
         heading = startHeading,
         baseCoords = startCoords,
-        zOffset = startCoords.z - getGroundZ(startCoords),
         valid = false,
         reason = 'Carregando validação...',
         lastValidation = 0,
+        groundMode = 'manual',
     }
 
     lib.notify({ title = 'Elevador', description = 'Modo de edição iniciado. ENTER confirma e BACKSPACE cancela.', type = 'inform' })
@@ -412,6 +451,8 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
             DisableControlAction(0, 11, true)
             DisableControlAction(0, 14, true)
             DisableControlAction(0, 15, true)
+            DisableControlAction(0, 208, true)
+            DisableControlAction(0, 207, true)
 
             local fine = IsDisabledControlPressed(0, 21)
             local moveStep = fine and (Config.Lift.Editor.fineMoveSpeed or 0.01) or (Config.Lift.Editor.moveSpeed or 0.03)
@@ -439,16 +480,19 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
             if IsDisabledControlPressed(0, 38) or IsDisabledControlPressed(0, 15) then
                 editorState.heading = (editorState.heading - rotStep) % 360.0
             end
-            if IsDisabledControlPressed(0, 10) then
-                editorState.zOffset = editorState.zOffset + verticalStep
+            if IsDisabledControlPressed(0, 10) or IsDisabledControlPressed(0, 208) then
+                editorState.baseCoords = editorState.baseCoords + vec3(0.0, 0.0, verticalStep)
             end
-            if IsDisabledControlPressed(0, 11) then
-                editorState.zOffset = editorState.zOffset - verticalStep
+            if IsDisabledControlPressed(0, 11) or IsDisabledControlPressed(0, 207) then
+                editorState.baseCoords = editorState.baseCoords - vec3(0.0, 0.0, verticalStep)
             end
 
-            local snappedGround = getGroundZ(editorState.baseCoords)
-            local finalCoords = vec3(editorState.baseCoords.x, editorState.baseCoords.y, snappedGround + editorState.zOffset)
+            local groundReference, groundMode = getGroundZ(editorState.baseCoords)
+            local manualDelta = editorState.baseCoords.z - groundReference
+            local finalCoords = editorState.baseCoords
             editorState.finalCoords = finalCoords
+            editorState.groundMode = groundMode
+            editorState.manualGroundDelta = manualDelta
 
             setPreviewTransform(editorState.preview, finalCoords, editorState.heading)
 
@@ -500,12 +544,21 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
             end
 
             drawEditorHelp({
-                ('~y~Editor de elevador~s~ | Oficina: %s'):format(shop.label),
-                'WASD / setas: mover | Q/E ou scroll: rotacionar | PgUp/PgDn: subir/descer',
-                'Segure SHIFT para ajuste fino.',
-                ('Status: %s%s'):format(editorState.valid and '~g~' or '~r~', editorState.reason or '---'),
-                ('Coords: %.2f %.2f %.2f | Heading: %.2f'):format(finalCoords.x, finalCoords.y, finalCoords.z, editorState.heading),
-                '~g~ENTER~s~ confirmar | ~r~BACKSPACE~s~ cancelar',
+                header = {
+                    { text = ('~y~EDITOR DE ELEVADOR~s~  |  Oficina: %s'):format(shop.label), color = { 255, 215, 120, 240 }, scale = 0.36 },
+                    { text = ('Modelo: %s'):format(editorState.requestedModel or (editorState.lift and editorState.lift.model) or Config.Lift.DefaultModelName), color = { 230, 230, 230, 230 } },
+                },
+                controls = {
+                    { text = '~b~Mover~s~: WASD ou setas', color = { 160, 220, 255, 235 } },
+                    { text = '~b~Rotacionar~s~: Q / E ou scroll do mouse', color = { 160, 220, 255, 235 } },
+                    { text = '~b~Altura~s~: PageUp sobe | PageDown desce', color = { 160, 220, 255, 235 } },
+                    { text = '~b~Ajuste fino~s~: segure SHIFT', color = { 160, 220, 255, 235 } },
+                },
+                footer = {
+                    { text = ('Status: %s%s~s~'):format(editorState.valid and '~g~' or '~r~', editorState.reason or '---'), color = editorState.valid and { 120, 255, 120, 240 } or { 255, 120, 120, 240 } },
+                    { text = ('Altura manual | Ref solo: %s | Delta: %.2f | Coords: %.2f %.2f %.2f | Heading: %.2f'):format(editorState.groundMode or 'fallback', editorState.manualGroundDelta or 0.0, finalCoords.x, finalCoords.y, finalCoords.z, editorState.heading), color = { 230, 230, 230, 230 } },
+                    { text = '~g~ENTER~s~ confirmar  |  ~r~BACKSPACE~s~ cancelar', color = { 255, 255, 255, 240 }, scale = 0.35 },
+                },
             })
         end
     end)

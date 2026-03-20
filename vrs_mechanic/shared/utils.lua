@@ -92,6 +92,26 @@ function VRS.Clamp(value, min, max)
     return value
 end
 
+--- Normaliza heading para o intervalo [0, 360)
+---@param heading number|nil
+---@return number
+function VRS.NormalizeHeading(heading)
+    local normalized = (tonumber(heading) or 0.0) % 360.0
+    if normalized < 0.0 then
+        normalized = normalized + 360.0
+    end
+    return normalized
+end
+
+--- Retorna a menor diferença angular entre dois headings
+---@param a number|nil
+---@param b number|nil
+---@return number
+function VRS.GetHeadingDelta(a, b)
+    local delta = math.abs(VRS.NormalizeHeading(a) - VRS.NormalizeHeading(b))
+    return math.min(delta, 360.0 - delta)
+end
+
 --- Verifica se uma parte é válida
 ---@param part string
 ---@return boolean
@@ -439,4 +459,68 @@ function VRS.GetLiftMetrics(lift)
         supportedClasses = lift and lift.supportedClasses or profile.supportedClasses,
         profileName = profile.model or 'default',
     }
+end
+
+--- Avalia se um veículo está alinhado dentro da área útil do elevador
+---@param liftCoords vector4|table
+---@param metrics table
+---@param vehicleCoords vector3|table
+---@param vehicleHeading number|nil
+---@param vehicleClass number|nil
+---@return boolean, string, table
+function VRS.EvaluateLiftVehiclePlacement(liftCoords, metrics, vehicleCoords, vehicleHeading, vehicleClass)
+    if not liftCoords or not metrics or not vehicleCoords then
+        return false, 'invalid_context', {}
+    end
+
+    local supportedClasses = metrics.supportedClasses
+    if type(supportedClasses) == 'table' and vehicleClass ~= nil and not VRS.TableContains(supportedClasses, vehicleClass) then
+        return false, 'unsupported_vehicle', { vehicleClass = vehicleClass }
+    end
+
+    local liftHeading = VRS.NormalizeHeading(liftCoords.w or liftCoords.heading or 0.0)
+    local dx = (vehicleCoords.x or 0.0) - (liftCoords.x or 0.0)
+    local dy = (vehicleCoords.y or 0.0) - (liftCoords.y or 0.0)
+    local dz = math.abs((vehicleCoords.z or 0.0) - (liftCoords.z or 0.0))
+    local radians = math.rad(liftHeading)
+    local forwardOffset = (dx * math.sin(radians)) + (dy * math.cos(radians))
+    local lateralOffset = (dx * math.cos(radians)) - (dy * math.sin(radians))
+    local halfLength = ((tonumber(metrics.length) or 5.0) * 0.5) + 0.75
+    local halfWidth = ((tonumber(metrics.width) or 2.5) * 0.5) + 0.55
+    local forwardDelta = math.abs(forwardOffset)
+    local lateralDelta = math.abs(lateralOffset)
+    local headingDelta = math.min(
+        VRS.GetHeadingDelta(vehicleHeading, liftHeading),
+        VRS.GetHeadingDelta(vehicleHeading, liftHeading + 180.0)
+    )
+
+    local details = {
+        liftHeading = liftHeading,
+        forwardOffset = forwardOffset,
+        lateralOffset = lateralOffset,
+        forwardDelta = forwardDelta,
+        lateralDelta = lateralDelta,
+        verticalDelta = dz,
+        headingDelta = headingDelta,
+        halfLength = halfLength,
+        halfWidth = halfWidth,
+    }
+
+    if forwardDelta > halfLength then
+        return false, 'vehicle_outside_length', details
+    end
+
+    if lateralDelta > halfWidth then
+        return false, 'vehicle_outside_width', details
+    end
+
+    if headingDelta > 35.0 then
+        return false, 'vehicle_bad_heading', details
+    end
+
+    if dz > 2.5 then
+        return false, 'vehicle_height_mismatch', details
+    end
+
+    return true, 'ok', details
 end

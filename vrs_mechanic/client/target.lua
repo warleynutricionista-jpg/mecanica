@@ -38,6 +38,16 @@ local function canUseLiftPanel(shopId)
     return VRS.CanUseLift(shopId)
 end
 
+local function getLiftVehicle(shopId, liftIndex)
+    local state = VRS.GetLiftStateSnapshot and VRS.GetLiftStateSnapshot(shopId, liftIndex) or nil
+    local netId = state and state.vehicleNetId or nil
+    if not netId then
+        return nil
+    end
+
+    return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
+end
+
 local function removeLiftTargets()
     for key, zoneId in pairs(liftTargets) do
         exports.ox_target:removeZone(zoneId)
@@ -66,17 +76,38 @@ local function createLiftTargets(shopId, shop)
                     icon = 'fas fa-car-side',
                     label = 'Serviços do elevador',
                     distance = 3.0,
+                    canInteract = function()
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                    end,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
                     end,
                 },
                 {
-                    name = liftId .. '_admin',
-                    icon = 'fas fa-screwdriver-wrench',
-                    label = 'Gerenciar elevador',
+                    name = liftId .. '_panel',
+                    icon = 'fas fa-sliders',
+                    label = 'Painel do Elevador',
                     distance = 3.0,
+                    canInteract = function()
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                    end,
                     onSelect = function()
-                        VRS.OpenLiftAdminMenu(shopId, lift.id)
+                        VRS.OpenLiftPanel(shopId, i)
+                    end,
+                },
+                {
+                    name = liftId .. '_repair',
+                    icon = 'fas fa-wrench',
+                    label = 'Reparo de Oficina',
+                    distance = 3.0,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId) and getLiftVehicle(shopId, i) ~= nil
+                    end,
+                    onSelect = function()
+                        local vehicle = getLiftVehicle(shopId, i)
+                        if vehicle then
+                            VRS.OpenShopRepairMenu(vehicle, shopId)
+                        end
                     end,
                 },
             },
@@ -104,12 +135,19 @@ local function createLiftTargets(shopId, shop)
                     end,
                 },
                 {
-                    name = panelId .. '_admin',
-                    icon = 'fas fa-pen-ruler',
-                    label = 'Reposicionar elevador',
+                    name = panelId .. '_repair',
+                    icon = 'fas fa-wrench',
+                    label = 'Reparo de Oficina',
                     distance = Config.Lift.controlPanelDistance or 2.5,
+                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId) and getLiftVehicle(shopId, i) ~= nil
+                    end,
                     onSelect = function()
-                        VRS.OpenLiftAdminMenu(shopId, lift.id)
+                        local vehicle = getLiftVehicle(shopId, i)
+                        if vehicle then
+                            VRS.OpenShopRepairMenu(vehicle, shopId)
+                        end
                     end,
                 },
             },

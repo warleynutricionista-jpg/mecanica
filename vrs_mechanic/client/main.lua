@@ -23,6 +23,83 @@ VRS.ApplyLiftLayouts = VRS.ApplyLiftLayouts or function() end
 VRS.RebuildLiftTargets = VRS.RebuildLiftTargets or function() end
 VRS.FetchLiftAdminData = VRS.FetchLiftAdminData or function() return nil end
 
+function VRS.IsValidVehicleEntity(entity)
+    return entity and entity ~= 0 and DoesEntityExist(entity) and IsEntityAVehicle(entity)
+end
+
+function VRS.GetEntityFromNetId(netId, requireVehicle)
+    local numericNetId = tonumber(netId)
+    if not numericNetId or numericNetId <= 0 then
+        return nil, 'invalid_netid'
+    end
+
+    if NetworkDoesNetworkIdExist and not NetworkDoesNetworkIdExist(numericNetId) then
+        return nil, 'missing_network_object'
+    end
+
+    local entity = NetworkGetEntityFromNetworkId(numericNetId)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then
+        return nil, 'missing_entity'
+    end
+
+    if requireVehicle and not IsEntityAVehicle(entity) then
+        return nil, 'not_vehicle'
+    end
+
+    return entity, nil
+end
+
+function VRS.GetSafeNetId(entity)
+    if not VRS.IsValidVehicleEntity(entity) then
+        return nil, 'invalid_vehicle'
+    end
+
+    local netId = NetworkGetNetworkIdFromEntity(entity)
+    if not netId or netId == 0 then
+        return nil, 'missing_network_id'
+    end
+
+    return netId, nil
+end
+
+function VRS.GetLiftStateSnapshot(shopId, liftIndex)
+    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
+    if not resolvedLift then
+        return {
+            shopId = shopId,
+            liftIndex = liftIndex,
+            height = Config.Lift.MinHeight or 0.0,
+            minHeight = Config.Lift.MinHeight or 0.0,
+            maxHeight = Config.Lift.MaxHeight or 2.1,
+            vehicleNetId = nil,
+            plate = nil,
+            moving = false,
+            direction = nil,
+        }
+    end
+
+    local cached = VRS.LiftState and VRS.LiftState[resolvedLift.liftKey] or nil
+    if cached then
+        return cached
+    end
+
+    return {
+        shopId = resolvedLift.shopId,
+        liftIndex = resolvedLift.liftIndex,
+        height = Config.Lift.MinHeight or 0.0,
+        minHeight = Config.Lift.MinHeight or 0.0,
+        maxHeight = Config.Lift.MaxHeight or 2.1,
+        vehicleNetId = nil,
+        plate = nil,
+        moving = false,
+        direction = nil,
+    }
+end
+
+VRS.RefreshLiftState = VRS.RefreshLiftState or function(shopId, liftIndex)
+    return VRS.GetLiftStateSnapshot(shopId, liftIndex)
+end
+
 -- ============================================================
 -- SYNC DE STATUS
 -- ============================================================

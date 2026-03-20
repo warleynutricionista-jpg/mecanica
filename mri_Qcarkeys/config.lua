@@ -38,6 +38,8 @@ Config.Hotwire = {
 
 Config.Lockpick = {
     Enabled = true,
+    Item = 'lockpick',
+    AdvancedItem = 'advancedlockpick',
     Stages = 6,
     FailMode = 'fail', -- fail | regress
     BreakChance = 0.5,

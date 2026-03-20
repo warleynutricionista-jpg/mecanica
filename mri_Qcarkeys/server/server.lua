@@ -878,6 +878,10 @@ end)
 
 RegisterNetEvent('mm_carkeys:server:removelockpick', function(item)
     local src = source
+    if type(item) ~= 'string' or item == '' then
+        debugLog('ignored lockpick removal with invalid item src=%s item=%s', src, tostring(item))
+        return
+    end
     Bridge:RemoveItem(src, item)
 end)
 

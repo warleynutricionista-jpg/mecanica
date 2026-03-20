@@ -8,6 +8,10 @@ VRS.LoadLocale()
 -- Cache de cooldowns por jogador
 local playerCooldowns = {}
 
+local function isVehicleEntity(entity)
+    return entity and entity ~= 0 and DoesEntityExist(entity) and GetEntityType(entity) == 2
+end
+
 function VRS.GetEntityFromNetId(netId, requireVehicle)
     local numericNetId = tonumber(netId)
     if not numericNetId or numericNetId <= 0 then
@@ -23,7 +27,7 @@ function VRS.GetEntityFromNetId(netId, requireVehicle)
         return nil, 'missing_entity'
     end
 
-    if requireVehicle and not IsEntityAVehicle(entity) then
+    if requireVehicle and not isVehicleEntity(entity) then
         return nil, 'not_vehicle'
     end
 
@@ -31,7 +35,7 @@ function VRS.GetEntityFromNetId(netId, requireVehicle)
 end
 
 function VRS.GetSafeNetId(entity)
-    if not entity or entity == 0 or not DoesEntityExist(entity) or not IsEntityAVehicle(entity) then
+    if not isVehicleEntity(entity) then
         return nil, 'invalid_vehicle'
     end
 

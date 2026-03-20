@@ -5,7 +5,7 @@
 VRS = VRS or {}
 
 local function isVehicleEntity(vehicle)
-    return vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) and IsEntityAVehicle(vehicle)
+    return vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) and GetEntityType(vehicle) == 2
 end
 
 local function resolveVehicle(vehicleOrPlate)

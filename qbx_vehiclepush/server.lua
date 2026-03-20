@@ -37,3 +37,7 @@ RegisterNetEvent('qbx_vehiclepush:server:push', function(data)
 
     Entity(vehicle).state:set('pushVehicle', data.direction, true)
 end)
+
+AddEventHandler('playerDropped', function()
+    pushCooldowns[source] = nil
+end)

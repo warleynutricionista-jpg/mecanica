@@ -70,10 +70,7 @@ local function damageRandomComponent()
 	local dmgFctr = math.random() + math.random(0, 2)
 	local randomComponent = DamageComponents[math.random(1, #DamageComponents)]
 	local randomDamage = (math.random() + math.random(0, 1)) * dmgFctr
-	pcall(function()
-		local currentValue = exports.qbx_mechanicjob:GetVehicleStatus(plate, randomComponent) or 0
-		exports.qbx_mechanicjob:SetVehicleStatus(plate, randomComponent, currentValue - randomDamage)
-	end)
+	VRSFailureAdapter.ApplyRandomComponentDamage(plate, randomComponent, randomDamage)
 end
 
 ---cleans vehicle with animation and progress bar. Consumes a cleaning kit.

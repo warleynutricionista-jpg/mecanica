@@ -77,6 +77,10 @@ Shared = {
         regressAmount = cfg.Lockpick and cfg.Lockpick.RegressAmount or 1,
         stageDuration = cfg.Lockpick and cfg.Lockpick.StageDuration or 1200
     },
+    items = {
+        lockpick = cfg.Lockpick and cfg.Lockpick.Item or 'lockpick',
+        advancedLockpick = cfg.Lockpick and cfg.Lockpick.AdvancedItem or 'advancedlockpick',
+    },
     security = {
         actionCooldownMs = cfg.Security and cfg.Security.ActionCooldownMs or 1200,
         maxInteractDistance = cfg.Security and cfg.Security.MaxInteractDistance or 5.0,

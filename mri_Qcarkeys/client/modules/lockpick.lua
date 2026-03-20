@@ -4,6 +4,24 @@ local Action = require 'client.modules.action_helper'
 
 local LockPick = { lockpicking = false, activeToken = nil }
 
+function LockPick:GetLockpickItem(isAdvanced)
+    local items = Shared.items or {}
+    local itemName = isAdvanced and items.advancedLockpick or items.lockpick
+
+    if type(itemName) ~= 'string' or itemName == '' then
+        Shared.DebugPrint('lockpick item not configured for advanced=%s', tostring(isAdvanced))
+        return nil
+    end
+
+    return itemName
+end
+
+function LockPick:FinishAttempt(isAdvanced)
+    TriggerServerEvent('hud:server:GainStress', Shared.lockpick.stressIncrease)
+    self:BreakLockPick(isAdvanced)
+    self.lockpicking = false
+end
+
 function LockPick:Minigame()
     if Shared.lockpick.minigameScript == 'inside-lockpicking' then
         local result = exports['inside-lockpicking']:StartLockPicking({ difficulty = 'easy', requiredAmount = 2 })
@@ -15,9 +33,12 @@ end
 function LockPick:BreakLockPick(isAdvanced)
     local chance = math.random()
     local canBreak = isAdvanced and chance <= Shared.lockpick.advancedBreakChance or chance <= Shared.lockpick.breakChance
-    if canBreak then
-        TriggerServerEvent('mm_carkeys:server:removelockpick', isAdvanced and Shared.items.advancedLockpick or Shared.items.lockpick)
-    end
+    if not canBreak then return end
+
+    local itemName = self:GetLockpickItem(isAdvanced)
+    if not itemName then return end
+
+    TriggerServerEvent('mm_carkeys:server:removelockpick', itemName)
 end
 
 function LockPick:RunServerStages(vehicle, mode)
@@ -76,9 +97,7 @@ function LockPick:LockPickDoor(isAdvanced)
 
     self.lockpicking = true
     local result, reason = self:RunServerStages(vehicle, 'door')
-    TriggerServerEvent('hud:server:GainStress', Shared.lockpick.stressIncrease)
-    self:BreakLockPick(isAdvanced)
-    self.lockpicking = false
+    self:FinishAttempt(isAdvanced)
 
     if result then
         local plate = GetVehicleNumberPlateText(vehicle)
@@ -103,9 +122,7 @@ function LockPick:LockPickEngine(isAdvanced)
 
     self.lockpicking = true
     local result, reason = self:RunServerStages(VehicleKeys.currentVehicle, 'engine')
-    TriggerServerEvent('hud:server:GainStress', Shared.lockpick.stressIncrease)
-    self:BreakLockPick(isAdvanced)
-    self.lockpicking = false
+    self:FinishAttempt(isAdvanced)
 
     if result then
         SetVehicleEngineOn(VehicleKeys.currentVehicle, true, true, true)

@@ -5,6 +5,7 @@
 --- Log de ações
 RegisterNetEvent('vrs_mechanic:server:log', function(data)
     if not Config.Logging.enabled then return end
+    if type(data) ~= 'table' then return end
 
     local src = data.source
     local playerName = 'Sistema'

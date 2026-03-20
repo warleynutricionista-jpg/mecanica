@@ -14,7 +14,7 @@ local function resolveVehicle(vehicleOrPlate)
             return vehicleOrPlate, VRS.GetPlate(vehicleOrPlate)
         end
 
-        local entity = NetworkGetEntityFromNetworkId(vehicleOrPlate)
+        local entity = VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(vehicleOrPlate, true) or nil
         if isVehicleEntity(entity) then
             return entity, VRS.GetPlate(entity)
         end
@@ -37,7 +37,8 @@ function VRS.GetIntegratedVehicleStateServer(vehicleOrPlate)
     local liftState = nil
     if VRS.FindLiftByVehicle then
         local _foundLiftKey
-        _foundLiftKey, liftState = VRS.FindLiftByVehicle(plate, vehicle and NetworkGetNetworkIdFromEntity(vehicle) or nil)
+        local vehicleNetId = vehicle and VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
+        _foundLiftKey, liftState = VRS.FindLiftByVehicle(plate, vehicleNetId)
     end
 
     local serviceState = nil
@@ -46,7 +47,10 @@ function VRS.GetIntegratedVehicleStateServer(vehicleOrPlate)
         lockCandidates[#lockCandidates + 1] = 'plate:' .. plate
     end
     if vehicle then
-        lockCandidates[#lockCandidates + 1] = 'net:' .. tostring(NetworkGetNetworkIdFromEntity(vehicle))
+        local netId = VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
+        if netId then
+            lockCandidates[#lockCandidates + 1] = 'net:' .. tostring(netId)
+        end
     end
     for _, key in ipairs(lockCandidates) do
         local active = VRS.ActiveServices and VRS.ActiveServices[key] or nil

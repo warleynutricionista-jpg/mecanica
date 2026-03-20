@@ -72,7 +72,10 @@ end
 function VRS.GetLiftStateForVehicle(vehicle)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return nil end
 
-    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    local netId = VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
+    if not netId then
+        return nil
+    end
     for liftKey, state in pairs(VRS.LiftState or {}) do
         if state and state.vehicleNetId == netId then
             return state, liftKey
@@ -217,7 +220,7 @@ end
 
 function VRS.BeginContextualVehicleService(vehicle, shopId, serviceType, serviceKey, extra)
     local plate = VRS.GetPlate(vehicle)
-    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    local netId = VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
     local context = VRS.GetServiceContext(serviceType, serviceKey, extra)
     if not plate or not context then
         lib.notify({ title = 'Serviço', description = 'Configuração contextual inválida para este serviço.', type = 'error' })

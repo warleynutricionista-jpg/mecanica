@@ -35,6 +35,10 @@ local function clampHeight(height, shopId, liftIndex)
     return VRS.Clamp(numericHeight, metrics.minHeight, metrics.maxHeight)
 end
 
+local function getMovementWatchdogDeadline()
+    return GetGameTimer() + math.max(tonumber(Config.Lift.MovementTimeoutMs) or 20000, 5000)
+end
+
 local function getPresetKey(source, shopId, liftIndex)
     local player = exports.qbx_core:GetPlayer(source)
     if not player then return nil end
@@ -141,7 +145,7 @@ lib.callback.register('vrs_mechanic:server:getLiftState', function(source, shopI
 
     local state = syncLiftState(shopId, liftIndex)
     local presetKey = getPresetKey(source, shopId, liftIndex)
-    state.savedHeight = presetKey and savedLiftHeights[presetKey] or nil
+    state.savedHeight = presetKey and clampHeight(savedLiftHeights[presetKey], shopId, liftIndex) or nil
     return state
 end)
 
@@ -163,6 +167,7 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
 
     local key = getLiftKey(shopId, liftIndex)
     local state = buildLiftState(shopId, liftIndex)
+    local metrics = getLiftMetrics(shopId, liftIndex)
 
     if state.moving then
         return { success = false, reason = 'lift_busy' }
@@ -174,7 +179,9 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
 
     state.vehicleNetId = netId
     state.plate = plate
-    state.height = getLiftMetrics(shopId, liftIndex).minHeight
+    state.height = metrics.minHeight
+    state.minHeight = metrics.minHeight
+    state.maxHeight = metrics.maxHeight
     state.moving = false
     state.direction = nil
     VRS.LiftStates[key] = state
@@ -192,6 +199,7 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
 
     local key = getLiftKey(shopId, liftIndex)
     local state = buildLiftState(shopId, liftIndex)
+    local metrics = getLiftMetrics(shopId, liftIndex)
 
     if state.moving then
         return { success = false, reason = 'lift_busy' }
@@ -202,16 +210,16 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
     end
 
     local tolerance = 0.05
-    if (state.height or 0.0) > ((getLiftMetrics(shopId, liftIndex).minHeight) + tolerance) then
+    if (state.height or 0.0) > (metrics.minHeight + tolerance) then
         return { success = false, reason = 'lift_not_lowered' }
     end
 
     VRS.LiftStates[key] = {
         shopId = shopId,
         liftIndex = liftIndex,
-        height = getLiftMetrics(shopId, liftIndex).minHeight,
-        minHeight = getLiftMetrics(shopId, liftIndex).minHeight,
-        maxHeight = getLiftMetrics(shopId, liftIndex).maxHeight,
+        height = metrics.minHeight,
+        minHeight = metrics.minHeight,
+        maxHeight = metrics.maxHeight,
         vehicleNetId = nil,
         plate = nil,
         moving = false,
@@ -234,10 +242,12 @@ lib.callback.register('vrs_mechanic:server:liftCommand', function(source, shopId
 
     local key = getLiftKey(shopId, liftIndex)
     local state = buildLiftState(shopId, liftIndex)
+    local metrics = getLiftMetrics(shopId, liftIndex)
 
     if command == 'stop' then
         state.moving = false
         state.direction = nil
+        state.targetHeight = nil
         VRS.LiftStates[key] = state
         syncLiftState(shopId, liftIndex)
         broadcastMovement(shopId, liftIndex, 'stop')
@@ -249,11 +259,11 @@ lib.callback.register('vrs_mechanic:server:liftCommand', function(source, shopId
         if Config.Lift.requireVehicleToRaise and not state.vehicleNetId then
             return { success = false, reason = 'lift_empty' }
         end
-        if (state.height or 0.0) >= (getLiftMetrics(shopId, liftIndex).maxHeight) - 0.01 then
+        if (state.height or 0.0) >= metrics.maxHeight - 0.01 then
             return { success = false, reason = 'already_top' }
         end
     elseif command == 'down' then
-        if (state.height or 0.0) <= (getLiftMetrics(shopId, liftIndex).minHeight) + 0.01 then
+        if (state.height or 0.0) <= metrics.minHeight + 0.01 then
             return { success = false, reason = 'already_bottom' }
         end
     end
@@ -303,12 +313,15 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
     state.moving = true
     state.direction = direction
     state.targetHeight = clamped
+    state.minHeight = getLiftMetrics(shopId, liftIndex).minHeight
+    state.maxHeight = getLiftMetrics(shopId, liftIndex).maxHeight
     VRS.LiftStates[key] = state
     syncLiftState(shopId, liftIndex)
     broadcastMovement(shopId, liftIndex, direction)
 
     -- Monitorar até atingir altura alvo
     CreateThread(function()
+        local deadline = getMovementWatchdogDeadline()
         while true do
             Wait(100)
             local currentState = VRS.LiftStates[key]
@@ -327,6 +340,18 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
                 VRS.LiftStates[key] = currentState
                 syncLiftState(shopId, liftIndex)
                 broadcastMovement(shopId, liftIndex, 'stop')
+                break
+            end
+
+            if GetGameTimer() >= deadline then
+                currentState.height = clampHeight(currentState.height, shopId, liftIndex) or currentState.minHeight or 0.0
+                currentState.moving = false
+                currentState.direction = nil
+                currentState.targetHeight = nil
+                VRS.LiftStates[key] = currentState
+                syncLiftState(shopId, liftIndex)
+                broadcastMovement(shopId, liftIndex, 'stop')
+                VRS.DebugLog('liftSync', ('Timeout de movimento ao ajustar altura do elevador %s/%s.'):format(shopId, liftIndex))
                 break
             end
         end
@@ -392,6 +417,7 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
     broadcastMovement(shopId, liftIndex, direction)
 
     CreateThread(function()
+        local deadline = getMovementWatchdogDeadline()
         while true do
             Wait(100)
             local currentState = VRS.LiftStates[key]
@@ -408,6 +434,18 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
                 VRS.LiftStates[key] = currentState
                 syncLiftState(shopId, liftIndex)
                 broadcastMovement(shopId, liftIndex, 'stop')
+                break
+            end
+
+            if GetGameTimer() >= deadline then
+                currentState.height = clampHeight(currentState.height, shopId, liftIndex) or currentState.minHeight or 0.0
+                currentState.moving = false
+                currentState.direction = nil
+                currentState.targetHeight = nil
+                VRS.LiftStates[key] = currentState
+                syncLiftState(shopId, liftIndex)
+                broadcastMovement(shopId, liftIndex, 'stop')
+                VRS.DebugLog('liftSync', ('Timeout ao mover elevador salvo %s/%s.'):format(shopId, liftIndex))
                 break
             end
         end
@@ -435,12 +473,21 @@ end
 -- ============================================================
 
 RegisterNetEvent('vrs_mechanic:server:syncLiftHeight', function(shopId, liftIndex, height)
+    local src = source
+    local ok = validateLiftAccess(src, shopId, liftIndex)
+    if not ok then return end
+
     local key = getLiftKey(shopId, liftIndex)
     local state = VRS.LiftStates[key]
-    if state then
-        state.height = roundHeight(height)
-        VRS.LiftStates[key] = state
-    end
+    if not state or not state.moving then return end
+
+    local clampedHeight = clampHeight(height, shopId, liftIndex)
+    if clampedHeight == nil then return end
+
+    state.height = roundHeight(clampedHeight)
+    state.minHeight = state.minHeight or getLiftMetrics(shopId, liftIndex).minHeight
+    state.maxHeight = state.maxHeight or getLiftMetrics(shopId, liftIndex).maxHeight
+    VRS.LiftStates[key] = state
 end)
 
 -- ============================================================

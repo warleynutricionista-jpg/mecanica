@@ -161,6 +161,14 @@ Config.Logging = {
 }
 
 -- ============================================================
+-- DEBUG / DIAGNÓSTICO
+-- ============================================================
+Config.Debug = Config.Debug or {
+    enabled = false, -- habilite apenas para diagnóstico
+    modelResolution = false,
+}
+
+-- ============================================================
 -- ANTI-SPAM / COOLDOWNS
 -- ============================================================
 Config.Cooldowns = {

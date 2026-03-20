@@ -103,6 +103,7 @@ end
 function VRS.ValidateDistance(source, entity, maxDistance)
     local playerPed = GetPlayerPed(source)
     if not playerPed or playerPed == 0 then return false end
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return false end
 
     local playerCoords = GetEntityCoords(playerPed)
     local entityCoords = GetEntityCoords(entity)

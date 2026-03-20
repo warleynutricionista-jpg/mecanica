@@ -24,6 +24,7 @@ Config.Lift.SpeedUp = 0.0012
 Config.Lift.SpeedDown = 0.0018
 Config.Lift.SpeedSlow = 0.0006
 Config.Lift.SlowZoneSize = 0.15
+Config.Lift.MovementTimeoutMs = 20000
 
 -- ============================================================
 -- ALTURAS (offsets relativos a partir da base)
@@ -86,6 +87,7 @@ Config.Lift.WorldDetection = {
     enabled = true,
     discoverOnStart = true,
     discoverOnZoneEnter = true,
+    scanCooldownMs = 10000,
     maxDistanceFromShop = 45.0,
     maxObjectsPerScan = 2048,
     dedupeDistance = 1.5,

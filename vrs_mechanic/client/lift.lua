@@ -6,6 +6,8 @@
 local spawnedLifts = {}      -- { [liftKey] = { platform, poles, elecbox } }
 local liftMovement = {}      -- { [liftKey] = 'up' | 'down' | nil }
 local attachedVehicles = {}  -- { [liftKey] = vehicleEntity }
+local worldLiftScanState = {}
+local cachedLiftHashMap = nil
 
 -- ============================================================
 -- HELPERS
@@ -95,6 +97,10 @@ local function getLiftMetrics(shopId, liftIndex)
 end
 
 local function getLiftHashMap()
+    if cachedLiftHashMap then
+        return cachedLiftHashMap
+    end
+
     local results = {}
     for profileName, profile in pairs(Config.Lift.Models or {}) do
         if profileName ~= 'standard_lift' and (profile.useExistingEntity or profile.sourceType == 'world' or profile.sourceType == 'world_or_spawned') then
@@ -104,7 +110,23 @@ local function getLiftHashMap()
             end
         end
     end
+    cachedLiftHashMap = results
     return results
+end
+
+local function getScannableWorldObjects()
+    local pool = GetGamePool('CObject')
+    local limit = Config.Lift.WorldDetection and Config.Lift.WorldDetection.maxObjectsPerScan or nil
+    if not limit or limit <= 0 or #pool <= limit then
+        return pool
+    end
+
+    local trimmed = {}
+    for index = 1, limit do
+        trimmed[index] = pool[index]
+    end
+    VRS.DebugLog('liftScan', ('Pool de objetos truncado para %d de %d entradas.'):format(limit, #pool))
+    return trimmed
 end
 
 local function serializeVec3(value)
@@ -183,7 +205,7 @@ function VRS.GetNearestCompatibleWorldLift(maxDistance, shopId)
     local pedCoords = GetEntityCoords(cache.ped)
     local best, bestDist = nil, maxDistance or 10.0
 
-    for _, entity in ipairs(GetGamePool('CObject')) do
+    for _, entity in ipairs(getScannableWorldObjects()) do
         local modelName = hashMap[GetEntityModel(entity)]
         if modelName then
             local entityCoords = GetEntityCoords(entity)
@@ -225,13 +247,19 @@ function VRS.ScanWorldLifts(shopId)
     if not Config.Lift.WorldDetection or not Config.Lift.WorldDetection.enabled then return end
     local shop = Config.Shops[shopId]
     if not shop or not shop.zones or not shop.zones.main then return end
+    local cooldown = Config.Lift.WorldDetection.scanCooldownMs or 0
+    local now = GetGameTimer()
+    local scanState = worldLiftScanState[shopId] or {}
+    if cooldown > 0 and scanState.lastScanAt and (now - scanState.lastScanAt) < cooldown then
+        return scanState.lastResult
+    end
 
     local hashMap = getLiftHashMap()
     local found = {}
     local zoneCoords = shop.zones.main.coords
     local maxDistance = Config.Lift.WorldDetection.maxDistanceFromShop or 45.0
 
-    for _, entity in ipairs(GetGamePool('CObject')) do
+    for _, entity in ipairs(getScannableWorldObjects()) do
         local modelName = hashMap[GetEntityModel(entity)]
         if modelName then
             local entityCoords = GetEntityCoords(entity)
@@ -268,6 +296,11 @@ function VRS.ScanWorldLifts(shopId)
             end
         end
     end
+
+    worldLiftScanState[shopId] = {
+        lastScanAt = now,
+        lastResult = found,
+    }
 
     TriggerServerEvent('vrs_mechanic:server:registerWorldLifts', shopId, found)
     return found

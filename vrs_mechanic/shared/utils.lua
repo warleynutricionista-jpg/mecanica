@@ -4,6 +4,26 @@
 
 VRS = VRS or {}
 
+--- Retorna se o modo debug está habilitado
+---@param category string|nil
+---@return boolean
+function VRS.IsDebugEnabled(category)
+    local debugConfig = Config.Debug or {}
+    if category and debugConfig[category] ~= nil then
+        return debugConfig[category] == true
+    end
+
+    return debugConfig.enabled == true
+end
+
+--- Log de debug opcional e padronizado
+---@param category string
+---@param message string
+function VRS.DebugLog(category, message)
+    if not VRS.IsDebugEnabled(category) then return end
+    print(('[vrs_mechanic][debug][%s] %s'):format(category or 'general', message or ''))
+end
+
 --- Retorna o percentual de uma parte (0-100)
 ---@param part string
 ---@param value number
@@ -165,6 +185,8 @@ local function summarizeDebugValue(value, depth, visited)
 end
 
 local function debugModelResolution(origin, message, value)
+    if not VRS.IsDebugEnabled('modelResolution') then return end
+
     local summary = summarizeDebugValue(value)
     local key = table.concat({
         tostring(origin or 'unknown'),
@@ -175,7 +197,7 @@ local function debugModelResolution(origin, message, value)
     if modelDebugCache[key] then return end
     modelDebugCache[key] = true
 
-    print(('[vrs_mechanic][debug] %s | origin=%s | value=%s'):format(message, origin or 'unknown', summary))
+    VRS.DebugLog('modelResolution', ('%s | origin=%s | value=%s'):format(message, origin or 'unknown', summary))
 end
 
 local function resolveModelReference(value, origin, path, visited)

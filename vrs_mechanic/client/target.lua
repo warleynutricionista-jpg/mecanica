@@ -249,6 +249,19 @@ local function createVehicleTargets()
     vehicleTargetsCreated = true
 end
 
+local function removeVehicleTargets()
+    if not vehicleTargetsCreated then return end
+
+    pcall(function()
+        exports.ox_target:removeGlobalVehicle({
+            'vrs_vehicle_diagnose',
+            'vrs_street_repair',
+        })
+    end)
+
+    vehicleTargetsCreated = false
+end
+
 CreateThread(function()
     for shopId, shop in pairs(Config.Shops) do
         createLocationTargets(shopId, shop)
@@ -262,6 +275,7 @@ AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
 
     removeLiftTargets()
+    removeVehicleTargets()
 
     for _, zoneId in pairs(locationTargets) do
         exports.ox_target:removeZone(zoneId)

@@ -5,6 +5,7 @@
 local liftTargets = {}
 local panelTargets = {}
 local locationTargets = {}
+local vehicleTargetsCreated = false
 
 local function rotateOffset(offset, heading)
     local radians = math.rad(heading or 0.0)
@@ -36,11 +37,22 @@ local function canUseLiftPanel(shopId)
     return VRS.CanUseLift(shopId)
 end
 
+local function removeLiftTargets()
+    for key, zoneId in pairs(liftTargets) do
+        exports.ox_target:removeZone(zoneId)
+        liftTargets[key] = nil
+    end
+
+    for key, zoneId in pairs(panelTargets) do
+        exports.ox_target:removeZone(zoneId)
+        panelTargets[key] = nil
+    end
+end
+
 local function createLiftTargets(shopId, shop)
     if not shop.lifts then return end
 
     for i, lift in ipairs(shop.lifts) do
-        -- Zona do elevador (para menu de serviços)
         local liftId = ('vrs_lift_%s_%d'):format(shopId, i)
         liftTargets[liftId] = exports.ox_target:addBoxZone({
             coords = vec3(lift.coords.x, lift.coords.y, lift.coords.z),
@@ -57,10 +69,18 @@ local function createLiftTargets(shopId, shop)
                         VRS.OpenLiftMenu(shopId, i)
                     end,
                 },
+                {
+                    name = liftId .. '_admin',
+                    icon = 'fas fa-screwdriver-wrench',
+                    label = 'Gerenciar elevador',
+                    distance = 3.0,
+                    onSelect = function()
+                        VRS.OpenLiftAdminMenu(shopId, lift.id)
+                    end,
+                },
             },
         })
 
-        -- Painel de controle físico (abre NUI mini panel)
         local panelCoords = getLiftPanelCoords(lift)
         local panelId = ('vrs_lift_panel_%s_%d'):format(shopId, i)
         panelTargets[panelId] = exports.ox_target:addBoxZone({
@@ -82,8 +102,25 @@ local function createLiftTargets(shopId, shop)
                         VRS.OpenLiftPanel(shopId, i)
                     end,
                 },
+                {
+                    name = panelId .. '_admin',
+                    icon = 'fas fa-pen-ruler',
+                    label = 'Reposicionar elevador',
+                    distance = Config.Lift.controlPanelDistance or 2.5,
+                    onSelect = function()
+                        VRS.OpenLiftAdminMenu(shopId, lift.id)
+                    end,
+                },
             },
         })
+    end
+end
+
+function VRS.RebuildLiftTargets()
+    removeLiftTargets()
+
+    for shopId, shop in pairs(Config.Shops) do
+        createLiftTargets(shopId, shop)
     end
 end
 
@@ -179,6 +216,8 @@ local function createLocationTargets(shopId, shop)
 end
 
 local function createVehicleTargets()
+    if vehicleTargetsCreated then return end
+
     exports.ox_target:addGlobalVehicle({
         {
             name = 'vrs_vehicle_diagnose',
@@ -205,27 +244,25 @@ local function createVehicleTargets()
             end,
         },
     })
+
+    vehicleTargetsCreated = true
 end
 
 CreateThread(function()
     for shopId, shop in pairs(Config.Shops) do
-        createLiftTargets(shopId, shop)
         createLocationTargets(shopId, shop)
     end
 
+    VRS.RebuildLiftTargets()
     createVehicleTargets()
 end)
 
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
 
-    for id in pairs(liftTargets) do
-        exports.ox_target:removeZone(id)
-    end
-    for id in pairs(panelTargets) do
-        exports.ox_target:removeZone(id)
-    end
-    for id in pairs(locationTargets) do
-        exports.ox_target:removeZone(id)
+    removeLiftTargets()
+
+    for _, zoneId in pairs(locationTargets) do
+        exports.ox_target:removeZone(zoneId)
     end
 end)

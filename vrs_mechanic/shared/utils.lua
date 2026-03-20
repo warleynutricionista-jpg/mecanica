@@ -115,13 +115,156 @@ function VRS.DeepCopy(value)
     return copy
 end
 
+local modelDebugCache = {}
+
+local function summarizeDebugValue(value, depth, visited)
+    local valueType = type(value)
+    if value == nil then return 'nil' end
+    if valueType == 'string' then
+        return ('"%s"'):format(value)
+    end
+    if valueType == 'number' or valueType == 'boolean' then
+        return tostring(value)
+    end
+    if valueType ~= 'table' then
+        return ('<%s>'):format(valueType)
+    end
+
+    depth = depth or 0
+    visited = visited or {}
+    if visited[value] then
+        return '<table:recursive>'
+    end
+
+    if depth >= 1 then
+        local keys = {}
+        local total = 0
+        for key in pairs(value) do
+            total = total + 1
+            if #keys < 5 then
+                keys[#keys + 1] = tostring(key)
+            end
+        end
+        return ('<table keys=%s%s>'):format(table.concat(keys, ','), total > #keys and ',…' or '')
+    end
+
+    visited[value] = true
+    local parts = {}
+    local count = 0
+    for key, entry in pairs(value) do
+        count = count + 1
+        if count > 5 then
+            parts[#parts + 1] = '…'
+            break
+        end
+        parts[#parts + 1] = ('%s=%s'):format(tostring(key), summarizeDebugValue(entry, depth + 1, visited))
+    end
+    visited[value] = nil
+
+    return ('{%s}'):format(table.concat(parts, ', '))
+end
+
+local function debugModelResolution(origin, message, value)
+    local summary = summarizeDebugValue(value)
+    local key = table.concat({
+        tostring(origin or 'unknown'),
+        tostring(message or 'log'),
+        summary,
+    }, '|')
+
+    if modelDebugCache[key] then return end
+    modelDebugCache[key] = true
+
+    print(('[vrs_mechanic][debug] %s | origin=%s | value=%s'):format(message, origin or 'unknown', summary))
+end
+
+local function resolveModelReference(value, origin, path, visited)
+    local valueType = type(value)
+    if value == nil then return nil, nil end
+    if valueType == 'string' or valueType == 'number' then
+        return value, path or 'value'
+    end
+
+    if valueType ~= 'table' then
+        debugModelResolution(origin, ('modelo inválido: tipo=%s'):format(valueType), value)
+        return nil, nil
+    end
+
+    visited = visited or {}
+    if visited[value] then
+        debugModelResolution(origin, 'modelo inválido: tabela recursiva detectada', value)
+        return nil, nil
+    end
+
+    visited[value] = true
+    debugModelResolution(origin, 'joaat recebeu tipo=table; tentando normalizar campos conhecidos', value)
+
+    local candidateFields = {
+        'model',
+        'modelName',
+        'name',
+        'prop',
+        'platformModel',
+        'hash',
+        'modelHash',
+    }
+
+    for _, field in ipairs(candidateFields) do
+        local candidate = rawget(value, field)
+        if candidate ~= nil then
+            local candidatePath = path and ('%s.%s'):format(path, field) or field
+            debugModelResolution(origin, ('tentando usar field .%s'):format(field), candidate)
+
+            local resolved, resolvedPath = resolveModelReference(candidate, origin, candidatePath, visited)
+            if resolved ~= nil then
+                debugModelResolution(origin, ('campo resolvido com sucesso: %s'):format(resolvedPath), resolved)
+                visited[value] = nil
+                return resolved, resolvedPath
+            end
+        end
+    end
+
+    visited[value] = nil
+    debugModelResolution(origin, 'nenhum campo compatível encontrado para resolver model/hash', value)
+    return nil, nil
+end
+
+--- Normaliza uma referência de modelo/hash antes de resolução
+---@param model any
+---@param origin string|nil
+---@return string|number|nil, string|nil
+function VRS.GetModelReference(model, origin)
+    return resolveModelReference(model, origin or 'VRS.GetModelReference', 'value', {})
+end
+
 --- Resolve um model/hash para hash numérico
----@param model string|number|nil
+---@param model any
+---@param origin string|nil
 ---@return number|nil
-function VRS.ResolveModelHash(model)
-    if not model then return nil end
-    if type(model) == 'number' then return model end
-    return joaat(model)
+function VRS.ResolveModelHash(model, origin)
+    local reference, resolvedPath = VRS.GetModelReference(model, origin or 'VRS.ResolveModelHash')
+    if reference == nil then
+        debugModelResolution(origin or 'VRS.ResolveModelHash', 'falha ao resolver model/hash; abortando com segurança', model)
+        return nil
+    end
+
+    if type(reference) == 'number' then
+        if type(model) == 'table' then
+            debugModelResolution(origin or 'VRS.ResolveModelHash', ('hash numérico reaproveitado de %s'):format(resolvedPath or 'value'), reference)
+        end
+        return reference
+    end
+
+    if type(reference) ~= 'string' or reference == '' then
+        debugModelResolution(origin or 'VRS.ResolveModelHash', 'referência de modelo inválida após normalização', reference)
+        return nil
+    end
+
+    if type(model) == 'table' then
+        debugModelResolution(origin or 'VRS.ResolveModelHash', ('convertendo string de %s via joaat'):format(resolvedPath or 'value'), reference)
+    end
+
+    return joaat(reference)
 end
 
 local function copyVec(value, fallback)
@@ -134,22 +277,23 @@ end
 ---@param liftOrModel table|string|number
 ---@return table
 function VRS.GetLiftModelProfile(liftOrModel)
-    local model = type(liftOrModel) == 'table' and (liftOrModel.model or liftOrModel.modelName or liftOrModel.platformModel) or liftOrModel
+    local model = type(liftOrModel) == 'table' and (liftOrModel.model or liftOrModel.modelName or liftOrModel.platformModel or liftOrModel.name or liftOrModel.prop or liftOrModel.hash or liftOrModel.modelHash) or liftOrModel
     local defaults = VRS.DeepCopy(Config.Lift.ModelDefaults or {})
     local profiles = Config.Lift.Models or {}
+    local normalizedModel = VRS.GetModelReference(model or liftOrModel, 'VRS.GetLiftModelProfile')
 
-    if type(model) == 'string' and profiles[model] then
-        for key, value in pairs(profiles[model]) do
+    if type(normalizedModel) == 'string' and profiles[normalizedModel] then
+        for key, value in pairs(profiles[normalizedModel]) do
             defaults[key] = VRS.DeepCopy(value)
         end
-        defaults.model = model
+        defaults.model = normalizedModel
         return defaults
     end
 
-    local hash = VRS.ResolveModelHash(model)
+    local hash = VRS.ResolveModelHash(model or liftOrModel, 'VRS.GetLiftModelProfile')
     if hash then
         for profileName, profile in pairs(profiles) do
-            local profileHash = VRS.ResolveModelHash(profile.model or profileName)
+            local profileHash = VRS.ResolveModelHash(profile.model or profileName, ('VRS.GetLiftModelProfile.profile[%s]'):format(profileName))
             if profileHash == hash then
                 for key, value in pairs(profile) do
                     defaults[key] = VRS.DeepCopy(value)
@@ -160,7 +304,7 @@ function VRS.GetLiftModelProfile(liftOrModel)
         end
     end
 
-    defaults.model = type(model) == 'string' and model or defaults.model
+    defaults.model = type(normalizedModel) == 'string' and normalizedModel or defaults.model
     return defaults
 end
 

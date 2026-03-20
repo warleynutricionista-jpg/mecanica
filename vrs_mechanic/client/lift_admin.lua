@@ -28,7 +28,8 @@ local function serializeVec3(value)
 end
 
 local function prepareModel(model)
-    local hash = type(model) == 'string' and joaat(model) or model
+    local hash = VRS.ResolveModelHash(model, 'client.lift_admin.prepareModel')
+    if not hash then return nil end
     if HasModelLoaded(hash) then return hash end
 
     RequestModel(hash)

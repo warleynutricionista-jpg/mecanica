@@ -1,2 +1,0 @@
--- Legacy file intentionally left empty after full rewrite.
--- Active client code now lives in client/main.lua.

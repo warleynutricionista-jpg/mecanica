@@ -290,16 +290,9 @@ end
 local function getPlacementValidation(shopId, liftId, coords)
     local distanceLimit = Config.Lift.ValidationDistanceFromShop or 35.0
     local minSpacing = Config.Lift.MinSpacing or 4.0
-    local maxGroundDelta = Config.Lift.MaxGroundDelta or 0.45
-    local groundZ = getGroundZ(coords)
-    local verticalDelta = math.abs(coords.z - groundZ)
 
     if getShopDistance(shopId, coords) > distanceLimit then
         return false, ('Fora da área permitida da oficina (máx. %.1fm).'):format(distanceLimit)
-    end
-
-    if verticalDelta > maxGroundDelta then
-        return false, ('Altura desalinhada do chão (delta %.2f).'):format(verticalDelta)
     end
 
     local occupied = IsPositionOccupied(coords.x, coords.y, coords.z + 0.8, 1.2, false, false, false, false, true, 0, false)
@@ -419,8 +412,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
         startHeading = existingLift.coords.w or 0.0
     else
         local pedCoords = GetEntityCoords(cache.ped)
-        local groundZ = getGroundZ(pedCoords)
-        startCoords = vec3(pedCoords.x, pedCoords.y, groundZ)
+        startCoords = vec3(pedCoords.x, pedCoords.y, pedCoords.z)
         startHeading = GetEntityHeading(cache.ped)
     end
 
@@ -437,11 +429,10 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
         requestedModel = requestedModel or (existingLift and existingLift.model) or Config.Lift.DefaultModelName,
         heading = startHeading,
         baseCoords = startCoords,
-        zOffset = startCoords.z - select(1, getGroundZ(startCoords)),
         valid = false,
         reason = 'Carregando validação...',
         lastValidation = 0,
-        groundMode = 'ground',
+        groundMode = 'manual',
     }
 
     lib.notify({ title = 'Elevador', description = 'Modo de edição iniciado. ENTER confirma e BACKSPACE cancela.', type = 'inform' })
@@ -495,16 +486,18 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
                 editorState.heading = (editorState.heading - rotStep) % 360.0
             end
             if IsDisabledControlPressed(0, 10) or IsDisabledControlPressed(0, 208) then
-                editorState.zOffset = editorState.zOffset + verticalStep
+                editorState.baseCoords = editorState.baseCoords + vec3(0.0, 0.0, verticalStep)
             end
             if IsDisabledControlPressed(0, 11) or IsDisabledControlPressed(0, 207) then
-                editorState.zOffset = editorState.zOffset - verticalStep
+                editorState.baseCoords = editorState.baseCoords - vec3(0.0, 0.0, verticalStep)
             end
 
-            local snappedGround, groundMode = getGroundZ(editorState.baseCoords)
-            local finalCoords = vec3(editorState.baseCoords.x, editorState.baseCoords.y, snappedGround + editorState.zOffset)
+            local groundReference, groundMode = getGroundZ(editorState.baseCoords)
+            local manualDelta = editorState.baseCoords.z - groundReference
+            local finalCoords = editorState.baseCoords
             editorState.finalCoords = finalCoords
             editorState.groundMode = groundMode
+            editorState.manualGroundDelta = manualDelta
 
             setPreviewTransform(editorState.preview, finalCoords, editorState.heading)
 
@@ -570,7 +563,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
                 },
                 footer = {
                     { text = ('Status: %s%s~s~'):format(editorState.valid and '~g~' or '~r~', editorState.reason or '---'), color = editorState.valid and { 120, 255, 120, 240 } or { 255, 120, 120, 240 } },
-                    { text = ('Solo: %s | Coords: %.2f %.2f %.2f | Heading: %.2f'):format(editorState.groundMode or 'fallback', finalCoords.x, finalCoords.y, finalCoords.z, editorState.heading), color = { 230, 230, 230, 230 } },
+                    { text = ('Altura manual | Ref solo: %s | Delta: %.2f | Coords: %.2f %.2f %.2f | Heading: %.2f'):format(editorState.groundMode or 'fallback', editorState.manualGroundDelta or 0.0, finalCoords.x, finalCoords.y, finalCoords.z, editorState.heading), color = { 230, 230, 230, 230 } },
                     { text = '~g~ENTER~s~ confirmar  |  ~r~BACKSPACE~s~ cancelar', color = { 255, 255, 255, 240 }, scale = 0.35 },
                 },
             })

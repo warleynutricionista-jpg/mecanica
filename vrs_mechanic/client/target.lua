@@ -66,6 +66,9 @@ local function createLiftTargets(shopId, shop)
                     icon = 'fas fa-car-side',
                     label = 'Serviços do elevador',
                     distance = 3.0,
+                    canInteract = function()
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil
+                    end,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
                     end,
@@ -75,6 +78,9 @@ local function createLiftTargets(shopId, shop)
                     icon = 'fas fa-screwdriver-wrench',
                     label = 'Gerenciar elevador',
                     distance = 3.0,
+                    canInteract = function()
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil
+                    end,
                     onSelect = function()
                         VRS.OpenLiftAdminMenu(shopId, lift.id)
                     end,

@@ -8,6 +8,41 @@ VRS.LoadLocale()
 -- Cache de cooldowns por jogador
 local playerCooldowns = {}
 
+function VRS.GetEntityFromNetId(netId, requireVehicle)
+    local numericNetId = tonumber(netId)
+    if not numericNetId or numericNetId <= 0 then
+        return nil, 'invalid_netid'
+    end
+
+    if NetworkDoesNetworkIdExist and not NetworkDoesNetworkIdExist(numericNetId) then
+        return nil, 'missing_network_object'
+    end
+
+    local entity = NetworkGetEntityFromNetworkId(numericNetId)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then
+        return nil, 'missing_entity'
+    end
+
+    if requireVehicle and not IsEntityAVehicle(entity) then
+        return nil, 'not_vehicle'
+    end
+
+    return entity, nil
+end
+
+function VRS.GetSafeNetId(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) or not IsEntityAVehicle(entity) then
+        return nil, 'invalid_vehicle'
+    end
+
+    local netId = NetworkGetNetworkIdFromEntity(entity)
+    if not netId or netId == 0 then
+        return nil, 'missing_network_id'
+    end
+
+    return netId, nil
+end
+
 --- Verifica se o jogador tem o job correto para uma oficina
 ---@param source number
 ---@param shopId string
@@ -127,8 +162,8 @@ function VRS.ValidateVehicleContext(source, plate, netId, maxDistance)
     local vehicle = nil
 
     if netId then
-        vehicle = NetworkGetEntityFromNetworkId(netId)
-        if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        vehicle = VRS.GetEntityFromNetId(netId, true)
+        if not vehicle then
             return false, nil, 'invalid_vehicle'
         end
 

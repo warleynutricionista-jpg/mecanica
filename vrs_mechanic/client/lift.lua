@@ -18,6 +18,20 @@ local function getLiftKey(shopId, liftIndex)
     return ('%s_%s'):format(shopId, liftIndex)
 end
 
+local function splitLiftKey(liftKey)
+    local parts = {}
+    for part in tostring(liftKey or ''):gmatch('[^_]+') do
+        parts[#parts + 1] = part
+    end
+
+    local liftIndex = tonumber(parts[#parts])
+    if not liftIndex then
+        return nil, nil
+    end
+
+    return table.concat(parts, '_', 1, #parts - 1), liftIndex
+end
+
 local function getClientSource()
     return cache.serverId or GetPlayerServerId(PlayerId())
 end
@@ -95,6 +109,26 @@ end
 local function getLiftEntry(shopId, liftIndex)
     local shop = Config.Shops[shopId]
     return shop and shop.lifts and shop.lifts[liftIndex] or nil
+end
+
+local function resolveLiftVehicle(netId)
+    return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
+end
+
+local function hasVehicleOccupants(vehicle)
+    if not VRS.IsValidVehicleEntity(vehicle) then
+        return false
+    end
+
+    local maxPassengers = GetVehicleMaxNumberOfPassengers(vehicle)
+    for seat = -1, maxPassengers - 1 do
+        local ped = GetPedInVehicleSeat(vehicle, seat)
+        if ped and ped ~= 0 then
+            return true
+        end
+    end
+
+    return false
 end
 
 local function getLiftMetrics(shopId, liftIndex)
@@ -518,6 +552,78 @@ function VRS.GetLiftWorldCoords(shopId, liftIndex, height)
     return vehicleCoords, heading
 end
 
+function VRS.ValidateVehicleForLift(shopId, liftIndex, vehicle)
+    local resolvedLift, reason = VRS.ResolveLiftReference(shopId, liftIndex)
+    if not resolvedLift then
+        return false, reason or 'invalid_lift', {}
+    end
+
+    if not VRS.IsValidVehicleEntity(vehicle) then
+        return false, 'invalid_vehicle', {}
+    end
+
+    if GetEntitySpeed(vehicle) > 0.5 then
+        return false, 'vehicle_moving', {}
+    end
+
+    if hasVehicleOccupants(vehicle) then
+        return false, 'vehicle_occupied', {}
+    end
+
+    local vehicleState = Entity(vehicle).state and Entity(vehicle).state['vrs:onLift'] or nil
+    if vehicleState and vehicleState.shopId and vehicleState.liftIndex then
+        local currentKey = getLiftKey(vehicleState.shopId, vehicleState.liftIndex)
+        if currentKey ~= resolvedLift.liftKey then
+            return false, 'vehicle_already_on_other_lift', { currentLift = currentKey }
+        end
+    end
+
+    local metrics = getLiftMetrics(shopId, liftIndex)
+    local ok, placementReason, placement = VRS.EvaluateLiftVehiclePlacement(
+        resolvedLift.lift.coords,
+        metrics,
+        GetEntityCoords(vehicle),
+        GetEntityHeading(vehicle),
+        GetVehicleClass(vehicle)
+    )
+
+    if not ok then
+        return false, placementReason, placement
+    end
+
+    placement.netId = VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
+    return true, 'ok', placement
+end
+
+function VRS.FindBestVehicleForLift(shopId, liftIndex, maxDistance)
+    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
+    if not resolvedLift then
+        return nil, 'invalid_lift', nil
+    end
+
+    local liftCoords = vec3(resolvedLift.lift.coords.x, resolvedLift.lift.coords.y, resolvedLift.lift.coords.z)
+    local bestVehicle, bestDetails, bestDist = nil, nil, maxDistance or Config.Lift.snapDistance or 5.0
+    local rejectionReason = 'no_vehicle'
+
+    for _, vehicle in ipairs(GetGamePool('CVehicle')) do
+        if VRS.IsValidVehicleEntity(vehicle) then
+            local dist = #(GetEntityCoords(vehicle) - liftCoords)
+            if dist <= bestDist then
+                local ok, reason, details = VRS.ValidateVehicleForLift(shopId, liftIndex, vehicle)
+                if ok then
+                    bestVehicle = vehicle
+                    bestDetails = details
+                    bestDist = dist
+                else
+                    rejectionReason = reason or rejectionReason
+                end
+            end
+        end
+    end
+
+    return bestVehicle, rejectionReason, bestDetails
+end
+
 function VRS.GetLiftHeightLabel(height, shopId, liftIndex)
     height = roundHeight(height)
     local metrics = (shopId and liftIndex) and getLiftMetrics(shopId, liftIndex) or nil
@@ -655,9 +761,11 @@ function VRS.ApplyLiftState(shopId, liftIndex, state)
 
     -- Atualizar veículo anexado
     if state.vehicleNetId then
-        local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
-        if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        local vehicle = resolveLiftVehicle(state.vehicleNetId)
+        if vehicle then
             attachedVehicles[liftKey] = vehicle
+        else
+            attachedVehicles[liftKey] = nil
         end
     else
         if attachedVehicles[liftKey] and DoesEntityExist(attachedVehicles[liftKey]) then
@@ -669,8 +777,8 @@ function VRS.ApplyLiftState(shopId, liftIndex, state)
 
     -- Se veículo foi removido do elevador anterior
     if previousState.vehicleNetId and previousState.vehicleNetId ~= state.vehicleNetId then
-        local prevVehicle = NetworkGetEntityFromNetworkId(previousState.vehicleNetId)
-        if prevVehicle and prevVehicle ~= 0 and DoesEntityExist(prevVehicle) then
+        local prevVehicle = resolveLiftVehicle(previousState.vehicleNetId)
+        if prevVehicle then
             requestControl(prevVehicle)
             FreezeEntityPosition(prevVehicle, false)
         end
@@ -691,7 +799,41 @@ function VRS.RefreshLiftState(shopId, liftIndex)
     if state then
         VRS.ApplyLiftState(shopId, liftIndex, state)
     end
-    return state
+    return state or VRS.GetLiftStateSnapshot(shopId, liftIndex)
+end
+
+function VRS.GetLiftStateSnapshot(shopId, liftIndex)
+    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
+    if not resolvedLift then
+        return {
+            shopId = shopId,
+            liftIndex = liftIndex,
+            height = Config.Lift.MinHeight or 0.0,
+            minHeight = Config.Lift.MinHeight or 0.0,
+            maxHeight = Config.Lift.MaxHeight or 2.1,
+            vehicleNetId = nil,
+            plate = nil,
+            moving = false,
+            direction = nil,
+        }
+    end
+
+    local state = VRS.LiftState[resolvedLift.liftKey]
+    if state then
+        return state
+    end
+
+    return {
+        shopId = resolvedLift.shopId,
+        liftIndex = resolvedLift.liftIndex,
+        height = resolvedLift.lift.minHeight or Config.Lift.MinHeight or 0.0,
+        minHeight = resolvedLift.lift.minHeight or Config.Lift.MinHeight or 0.0,
+        maxHeight = resolvedLift.lift.maxHeight or Config.Lift.MaxHeight or 2.1,
+        vehicleNetId = nil,
+        plate = nil,
+        moving = false,
+        direction = nil,
+    }
 end
 
 RegisterNetEvent('vrs_mechanic:client:syncLiftState', function(shopId, liftIndex, state)
@@ -732,8 +874,8 @@ function VRS.OpenLiftPanel(shopId, liftIndex)
 
     local vehiclePlate = nil
     if state.vehicleNetId then
-        local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
-        if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        local vehicle = resolveLiftVehicle(state.vehicleNetId)
+        if vehicle then
             vehiclePlate = VRS.GetPlate(vehicle)
         end
     end
@@ -771,8 +913,8 @@ function VRS.UpdateLiftPanel()
 
     local vehiclePlate = nil
     if state.vehicleNetId then
-        local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
-        if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        local vehicle = resolveLiftVehicle(state.vehicleNetId)
+        if vehicle then
             vehiclePlate = VRS.GetPlate(vehicle)
         end
     end
@@ -875,18 +1017,14 @@ CreateThread(function()
                 if reachedTarget or (direction == 'up' and newHeight >= maxH) or (direction == 'down' and newHeight <= minH) then
                     liftMovement[liftKey] = nil
                     -- Extrair shopId e liftIndex do key
-                    local parts = {}
-                    for part in liftKey:gmatch('[^_]+') do
-                        parts[#parts + 1] = part
-                    end
-                    local lIdx = tonumber(parts[#parts])
-                    local sId = table.concat(parts, '_', 1, #parts - 1)
+                    local sId, lIdx = splitLiftKey(liftKey)
                     if sId and lIdx then
                         lib.callback.await('vrs_mechanic:server:liftCommand', false, sId, lIdx, 'stop')
                     end
                     liftAuthorizations[liftKey] = nil
                 end
             end
+        end
 
         -- Sincronizar altura com server periodicamente
         if hasMovement then
@@ -898,12 +1036,7 @@ CreateThread(function()
                     if data then
                         local h = getPlatformCurrentHeight(liftKey)
                         -- Extrair shopId e liftIndex
-                        local parts = {}
-                        for part in liftKey:gmatch('[^_]+') do
-                            parts[#parts + 1] = part
-                        end
-                        local lIdx = tonumber(parts[#parts])
-                        local sId = table.concat(parts, '_', 1, #parts - 1)
+                        local sId, lIdx = splitLiftKey(liftKey)
                         if sId and lIdx then
                             local authorization = liftAuthorizations[liftKey]
                             if not VRS.IsExperimentalEnabled('ServerAuthoritativeLift') or

@@ -14,6 +14,55 @@ local State = {
 
 local triggerEventHooks = require '@qbx_core.modules.hooks'
 
+
+local function isVrsMechanicActive()
+    return GetResourceState('vrs_mechanic') == 'started'
+end
+
+local function attachVrsMechanicPersistence(props)
+    if not isVrsMechanicActive() or type(props) ~= 'table' or not props.plate then
+        return props
+    end
+
+    local ok, persistence = pcall(function()
+        return exports.vrs_mechanic:GetVehiclePersistenceData(props.plate)
+    end)
+
+    if ok and persistence then
+        props.vrsMechanic = persistence
+    end
+
+    return props
+end
+
+local function seedVrsMechanicPersistence(props)
+    if not isVrsMechanicActive() or type(props) ~= 'table' or not props.plate then
+        return
+    end
+
+    local persisted = props.vrsMechanic
+    if not persisted or type(persisted.status) ~= 'table' then
+        return
+    end
+
+    pcall(function()
+        exports.vrs_mechanic:SeedVehicleStatus(props.plate, persisted.status)
+    end)
+end
+
+local function cleanupVrsMechanicPersistence(plates)
+    if not isVrsMechanicActive() or type(plates) ~= 'table' then
+        return
+    end
+
+    for i = 1, #plates do
+        pcall(function()
+            exports.vrs_mechanic:RemoveVehicleStatus(plates[i])
+        end)
+    end
+end
+
+
 ---Returns true if the given plate exists
 ---@param plate string
 ---@return boolean
@@ -145,6 +194,7 @@ local function createPlayerVehicle(request)
     props.bodyHealth = props.bodyHealth or 1000
     props.fuelLevel = props.fuelLevel or 100
     props.model = joaat(request.model)
+    attachVrsMechanicPersistence(props)
 
     if not triggerEventHooks('createPlayerVehicle', { citizenid = request.citizenid, garage = request.garage, props = props }) then
         return nil, {
@@ -153,7 +203,7 @@ local function createPlayerVehicle(request)
         }
     end
 
-    return MySQL.insert.await('INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, state, garage) VALUES ((SELECT license FROM players WHERE citizenid = @citizenid), @citizenid, @vehicle, @hash, @mods, @plate, @state, @garage)', {
+    local vehicleId = MySQL.insert.await('INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, state, garage) VALUES ((SELECT license FROM players WHERE citizenid = @citizenid), @citizenid, @vehicle, @hash, @mods, @plate, @state, @garage)', {
         citizenid = request.citizenid,
         vehicle = request.model,
         hash = props.model,
@@ -162,6 +212,10 @@ local function createPlayerVehicle(request)
         state = request.garage and State.GARAGED or State.OUT,
         garage = request.garage
     })
+
+    seedVrsMechanicPersistence(props)
+
+    return vehicleId
 end
 
 exports('CreatePlayerVehicle', createPlayerVehicle)
@@ -193,9 +247,20 @@ local function deletePlayerVehicles(idType, idValue)
     assert(idType == 'citizenid' or idType == 'license' or idType == 'plate' or idType == 'vehicleId', json.encode(idType) .. ' is not a valid idType')
 
     local column = idType == 'vehicleId' and 'id' or idType
+    local plates = MySQL.query.await('SELECT plate FROM player_vehicles WHERE ' .. column .. ' = ?', {
+        idValue
+    })
+
     MySQL.query.await('DELETE FROM player_vehicles WHERE ' .. column .. ' = ?', {
         idValue
     })
+
+    local removedPlates = {}
+    for i = 1, #plates do
+        removedPlates[#removedPlates + 1] = plates[i].plate
+    end
+    cleanupVrsMechanicPersistence(removedPlates)
+
     return true
 end
 
@@ -274,12 +339,38 @@ end
 ---@param options SaveVehicleOptions
 ---@return boolean success, ErrorResult? errorResult
 local function saveVehicle(vehicle, options)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or not IsEntityAVehicle(vehicle) then
+        return false, {
+            code = 'invalid_vehicle',
+            message = 'vehicle entity is invalid'
+        }
+    end
+
+    options = options or {}
+
+    if options.state == State.GARAGED and isVrsMechanicActive() then
+        local ok, canStore, reason = pcall(function()
+            return exports.vrs_mechanic:CanStoreVehicle(vehicle, options)
+        end)
+
+        if ok and canStore == false then
+            return false, {
+                code = reason or 'mechanic_blocked',
+                message = 'vrs_mechanic blocked vehicle storage for the current mechanical state'
+            }
+        end
+    end
+
     local vehicleId = Entity(vehicle).state.vehicleid or getVehicleIdByPlate(GetVehicleNumberPlateText(vehicle))
     if not vehicleId then
         return false, {
             code = 'not_owned',
             message = 'vehicle does not have a vehicleId and plate is not in the player_vehicles table'
         }
+    end
+
+    if options.props then
+        attachVrsMechanicPersistence(options.props)
     end
 
     local query, placeholders = buildSaveVehicleQuery(vehicleId, options)

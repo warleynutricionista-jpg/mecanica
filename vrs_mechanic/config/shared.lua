@@ -183,6 +183,37 @@ Config.DebugModules = Config.DebugModules or {
     rotatedZones = false,
 }
 
+
+-- ============================================================
+-- INTEGRAÇÃO COM RECURSOS DE VEÍCULOS
+-- ============================================================
+Config.EnableVrsMechanicIntegration = Config.EnableVrsMechanicIntegration ~= false
+Config.VehicleIntegration = Config.VehicleIntegration or {
+    VrsMechanicAsPrimaryMechanicalSource = true,
+    BlockPushWhenOnLift = true,
+    BlockPushDuringService = true,
+    BlockPushWhenDisabledByMechanic = true,
+    BlockLockpickDuringService = true,
+    BlockLockpickWhenOnLift = true,
+    RespectMechanicIgnitionState = true,
+    RespectMechanicGarageRestrictions = true,
+    RespectMechanicRadioState = true,
+    AllowRadioOnLift = true,
+    AllowRadioDuringService = false,
+    AllowRadioWithoutEngine = true,
+    CriticalEngineThreshold = 150.0,
+    CriticalBatteryThreshold = 5.0,
+    DebugVehicleIntegration = false,
+    DebugModules = {
+        lockpick = false,
+        failure = false,
+        push = false,
+        radio = false,
+        vehicles = false,
+        bridge = false,
+    }
+}
+
 -- ============================================================
 -- ANTI-SPAM / COOLDOWNS
 -- ============================================================

@@ -10,6 +10,46 @@ local pressed = {
 ---@type Direction
 local pushingControl = nil
 
+
+local function isVrsMechanicActive()
+    return GetResourceState('vrs_mechanic') == 'started'
+end
+
+local function notifyPushRestriction(reason)
+    local messages = {
+        service_active = 'Este veículo está em serviço mecânico e não pode ser empurrado.',
+        vehicle_on_lift = 'Este veículo está no elevador e não pode ser empurrado.',
+        mechanically_disabled = 'O estado mecânico atual bloqueia o empurrão.',
+    }
+
+    exports.qbx_core:Notify(messages[reason] or 'A integração mecânica bloqueou o empurrão.', 'error')
+end
+
+local function canPushWithMechanic(vehicle, notify)
+    if not isVrsMechanicActive() then
+        return true
+    end
+
+    local ok, allowed, reason = pcall(function()
+        local canPush, blockReason = exports.vrs_mechanic:CanPushVehicle(vehicle)
+        return canPush, blockReason
+    end)
+
+    if not ok then
+        return true
+    end
+
+    if allowed == false then
+        if notify then
+            notifyPushRestriction(reason)
+        end
+        return false
+    end
+
+    return true
+end
+
+
 ---@param vehicle number
 ---@return boolean
 local function checkClass(vehicle)
@@ -68,7 +108,7 @@ end
 local function isVehicleValid(vehicle)
     local engineHealth = GetVehicleEngineHealth(vehicle)
 
-    return ((engineHealth >= 0 and engineHealth <= config.damageNeeded) or (Entity(vehicle).state.fuel or 100) < 3) and IsVehicleSeatFree(vehicle, -1) and checkClass(vehicle)
+    return ((engineHealth >= 0 and engineHealth <= config.damageNeeded) or (Entity(vehicle).state.fuel or 100) < 3) and IsVehicleSeatFree(vehicle, -1) and checkClass(vehicle) and canPushWithMechanic(vehicle, false)
 end
 
 ---@param vehicle number
@@ -105,6 +145,7 @@ local function pushVehicle()
     if not vehicle then return end
 
     if IsEntityAttachedToEntity(cache.ped, vehicle) or not isVehicleValid(vehicle) then return end
+    if not canPushWithMechanic(vehicle, true) then return end
 
     vehicleValidityThread(vehicle)
 

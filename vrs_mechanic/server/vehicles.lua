@@ -3,6 +3,7 @@
 -- ============================================================
 
 local vehicleStatusCache = {}
+VRS.VehicleStatusCache = vehicleStatusCache
 
 --- Carrega status do veículo do banco de dados
 ---@param plate string
@@ -179,5 +180,33 @@ exports('SetVehiclePartStatus', function(plate, part, value)
     vehicleStatusCache[plate] = status
 
     TriggerClientEvent('vrs_mechanic:client:syncVehicleStatus', -1, plate, status)
+    return true
+end)
+
+
+exports('SeedVehicleStatus', function(plate, status)
+    if not plate or type(status) ~= 'table' then return false end
+
+    local normalized = {}
+    for part, value in pairs(status) do
+        local targetPart = VRS.NormalizePartName(part)
+        if VRS.IsValidPart(targetPart) then
+            local max = Config.MaxStatus[targetPart] or 100
+            normalized[targetPart] = VRS.Clamp(tonumber(value) or 0, 0, max)
+        end
+    end
+
+    if not next(normalized) then return false end
+
+    vehicleStatusCache[plate] = normalized
+    saveStatusToDB(plate, normalized)
+    TriggerClientEvent('vrs_mechanic:client:syncVehicleStatus', -1, plate, normalized)
+    return true
+end)
+
+exports('RemoveVehicleStatus', function(plate)
+    if not plate then return false end
+    vehicleStatusCache[plate] = nil
+    MySQL.query.await('DELETE FROM vrs_mechanic_vehicle_status WHERE plate = ?', { plate })
     return true
 end)

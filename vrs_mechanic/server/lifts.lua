@@ -221,6 +221,11 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
     clearLiftOperationState(state)
     VRS.LiftStates[key] = state
 
+    local vehicle = NetworkGetEntityFromNetworkId(netId)
+    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        Entity(vehicle).state:set('vrs:onLift', { shopId = shopId, liftIndex = liftIndex, plate = plate }, true)
+    end
+
     local synced = syncLiftState(shopId, liftIndex)
     return { success = true, state = synced, message = 'Veículo posicionado e pronto para serviço.' }
 end)
@@ -247,6 +252,11 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
     local tolerance = 0.05
     if (state.height or 0.0) > (metrics.minHeight + tolerance) then
         return { success = false, reason = 'lift_not_lowered' }
+    end
+
+    local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
+    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        Entity(vehicle).state:set('vrs:onLift', nil, true)
     end
 
     VRS.LiftStates[key] = {

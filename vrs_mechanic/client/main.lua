@@ -285,14 +285,17 @@ exports('GetVehicleStatusList', function(plate)
 end)
 
 exports('GetVehicleStatus', function(plate, part)
-    if VRS.VehicleStatus[plate] then
-        return VRS.VehicleStatus[plate][part]
+    local targetPart = VRS.NormalizePartName(part)
+    if VRS.VehicleStatus[plate] and targetPart then
+        return VRS.VehicleStatus[plate][targetPart]
     end
     return nil
 end)
 
 exports('SetVehicleStatus', function(plate, part, level)
-    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, part, level, cache.vehicle and NetworkGetNetworkIdFromEntity(cache.vehicle) or nil)
+    local targetPart = VRS.NormalizePartName(part)
+    if not targetPart then return end
+    TriggerServerEvent('vrs_mechanic:server:updatePart', plate, targetPart, level, cache.vehicle and NetworkGetNetworkIdFromEntity(cache.vehicle) or nil)
 end)
 
 print('[vrs_mechanic] ^2Cliente iniciado^0')

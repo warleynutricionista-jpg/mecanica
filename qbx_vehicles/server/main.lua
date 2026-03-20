@@ -14,6 +14,23 @@ local State = {
 
 local triggerEventHooks = require '@qbx_core.modules.hooks'
 
+
+local function isVrsMechanicActive()
+    return QbxVehiclesVrsHooks.IsActive()
+end
+
+local function attachVrsMechanicPersistence(props)
+    return QbxVehiclesVrsHooks.AttachPersistence(props)
+end
+
+local function seedVrsMechanicPersistence(props)
+    QbxVehiclesVrsHooks.SeedPersistence(props)
+end
+
+local function cleanupVrsMechanicPersistence(plates)
+    QbxVehiclesVrsHooks.CleanupPersistence(plates)
+end
+
 ---Returns true if the given plate exists
 ---@param plate string
 ---@return boolean
@@ -145,6 +162,7 @@ local function createPlayerVehicle(request)
     props.bodyHealth = props.bodyHealth or 1000
     props.fuelLevel = props.fuelLevel or 100
     props.model = joaat(request.model)
+    attachVrsMechanicPersistence(props)
 
     if not triggerEventHooks('createPlayerVehicle', { citizenid = request.citizenid, garage = request.garage, props = props }) then
         return nil, {
@@ -153,7 +171,7 @@ local function createPlayerVehicle(request)
         }
     end
 
-    return MySQL.insert.await('INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, state, garage) VALUES ((SELECT license FROM players WHERE citizenid = @citizenid), @citizenid, @vehicle, @hash, @mods, @plate, @state, @garage)', {
+    local vehicleId = MySQL.insert.await('INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, state, garage) VALUES ((SELECT license FROM players WHERE citizenid = @citizenid), @citizenid, @vehicle, @hash, @mods, @plate, @state, @garage)', {
         citizenid = request.citizenid,
         vehicle = request.model,
         hash = props.model,
@@ -162,6 +180,10 @@ local function createPlayerVehicle(request)
         state = request.garage and State.GARAGED or State.OUT,
         garage = request.garage
     })
+
+    seedVrsMechanicPersistence(props)
+
+    return vehicleId
 end
 
 exports('CreatePlayerVehicle', createPlayerVehicle)
@@ -193,9 +215,20 @@ local function deletePlayerVehicles(idType, idValue)
     assert(idType == 'citizenid' or idType == 'license' or idType == 'plate' or idType == 'vehicleId', json.encode(idType) .. ' is not a valid idType')
 
     local column = idType == 'vehicleId' and 'id' or idType
+    local plates = MySQL.query.await('SELECT plate FROM player_vehicles WHERE ' .. column .. ' = ?', {
+        idValue
+    })
+
     MySQL.query.await('DELETE FROM player_vehicles WHERE ' .. column .. ' = ?', {
         idValue
     })
+
+    local removedPlates = {}
+    for i = 1, #plates do
+        removedPlates[#removedPlates + 1] = plates[i].plate
+    end
+    cleanupVrsMechanicPersistence(removedPlates)
+
     return true
 end
 
@@ -274,12 +307,35 @@ end
 ---@param options SaveVehicleOptions
 ---@return boolean success, ErrorResult? errorResult
 local function saveVehicle(vehicle, options)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or not IsEntityAVehicle(vehicle) then
+        return false, {
+            code = 'invalid_vehicle',
+            message = 'vehicle entity is invalid'
+        }
+    end
+
+    options = options or {}
+
+    if options.state == State.GARAGED and isVrsMechanicActive() then
+        local canStore, reason = QbxVehiclesVrsHooks.ValidateStorage(vehicle, options)
+        if canStore == false then
+            return false, {
+                code = reason or 'mechanic_blocked',
+                message = 'vrs_mechanic blocked vehicle storage for the current mechanical state'
+            }
+        end
+    end
+
     local vehicleId = Entity(vehicle).state.vehicleid or getVehicleIdByPlate(GetVehicleNumberPlateText(vehicle))
     if not vehicleId then
         return false, {
             code = 'not_owned',
             message = 'vehicle does not have a vehicleId and plate is not in the player_vehicles table'
         }
+    end
+
+    if options.props then
+        attachVrsMechanicPersistence(options.props)
     end
 
     local query, placeholders = buildSaveVehicleQuery(vehicleId, options)

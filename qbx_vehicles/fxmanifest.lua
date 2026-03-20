@@ -9,6 +9,7 @@ server_scripts {
     '@ox_lib/init.lua',
     '@qbx_core/modules/lib.lua',
     '@oxmysql/lib/MySQL.lua',
+    'server/vrs_hooks.lua',
     'server/main.lua',
 }
 

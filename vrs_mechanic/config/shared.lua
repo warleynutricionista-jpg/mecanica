@@ -161,11 +161,26 @@ Config.Logging = {
 }
 
 -- ============================================================
+-- MODO SEGURO / EXPERIMENTAL
+-- ============================================================
+Config.SafeMode = Config.SafeMode ~= false
+Config.Experimental = Config.Experimental or {
+    ClientLoopOptimization = false,
+    ServerAuthoritativeLift = false,
+    RotatedWorkshopZones = false,
+}
+
+-- ============================================================
 -- DEBUG / DIAGNÓSTICO
 -- ============================================================
 Config.Debug = Config.Debug or {
     enabled = false, -- habilite apenas para diagnóstico
     modelResolution = false,
+}
+Config.DebugModules = Config.DebugModules or {
+    clientLoops = false,
+    liftAuthority = false,
+    rotatedZones = false,
 }
 
 -- ============================================================

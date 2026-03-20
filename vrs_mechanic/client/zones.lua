@@ -34,14 +34,19 @@ local function createShopZones(shopId, shop)
     if not shop.zones or not shop.zones.main then return end
 
     local zone = shop.zones.main
+    local useRotatedGeometry = VRS.IsExperimentalEnabled('RotatedWorkshopZones') and zone.rotation ~= nil and zone.size ~= nil
+    local debugEnabled = VRS.IsDebugEnabled('rotatedZones') and useRotatedGeometry
     shopZones[shopId] = lib.zones.box({
         coords = zone.coords,
         size = zone.size or vec3(20.0, 20.0, 5.0),
         rotation = zone.rotation or 0.0,
-        debug = false,
+        debug = debugEnabled,
         onEnter = function()
             VRS.CurrentShop = shopId
             VRS.InShopZone = true
+            if debugEnabled then
+                VRS.DebugLog('rotatedZones', ('Entrou na oficina %s usando modo %s.'):format(shopId, useRotatedGeometry and 'rotacionado' or 'legado'))
+            end
             if VRS.ScanWorldLifts and Config.Lift.WorldDetection and Config.Lift.WorldDetection.discoverOnZoneEnter then
                 VRS.ScanWorldLifts(shopId)
             end

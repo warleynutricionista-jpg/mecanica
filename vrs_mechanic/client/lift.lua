@@ -6,6 +6,7 @@
 local spawnedLifts = {}      -- { [liftKey] = { platform, poles, elecbox } }
 local liftMovement = {}      -- { [liftKey] = 'up' | 'down' | nil }
 local attachedVehicles = {}  -- { [liftKey] = vehicleEntity }
+local liftAuthorizations = {}
 local worldLiftScanState = {}
 local cachedLiftHashMap = nil
 
@@ -15,6 +16,10 @@ local cachedLiftHashMap = nil
 
 local function getLiftKey(shopId, liftIndex)
     return ('%s_%s'):format(shopId, liftIndex)
+end
+
+local function getClientSource()
+    return cache.serverId or GetPlayerServerId(PlayerId())
 end
 
 local function roundHeight(value)
@@ -552,6 +557,22 @@ function VRS.IsLiftMoving(shopId, liftIndex)
     return liftMovement[liftKey] ~= nil
 end
 
+local function updateLiftAuthorization(liftKey, payload)
+    if not VRS.IsExperimentalEnabled('ServerAuthoritativeLift') then return end
+    if type(payload) ~= 'table' then return end
+
+    local operationId = payload.operationId or payload.liftOperationId
+    if operationId then
+        liftAuthorizations[liftKey] = {
+            operationId = operationId,
+            operatorSource = payload.operatorSource,
+            operationStartedAt = payload.operationStartedAt,
+        }
+    elseif payload.moving == false or payload.direction == nil then
+        liftAuthorizations[liftKey] = nil
+    end
+end
+
 -- ============================================================
 -- CONTROLE DE MOVIMENTO
 -- ============================================================
@@ -587,6 +608,7 @@ function VRS.StartLiftMovement(shopId, liftIndex, direction)
         return false
     end
 
+    updateLiftAuthorization(liftKey, result)
     return true
 end
 
@@ -594,6 +616,7 @@ function VRS.StopLiftMovement(shopId, liftIndex)
     local liftKey = getLiftKey(shopId, liftIndex)
     if not liftMovement[liftKey] then return end
     lib.callback.await('vrs_mechanic:server:liftCommand', false, shopId, liftIndex, 'stop')
+    liftAuthorizations[liftKey] = nil
 end
 
 function VRS.SetLiftPresetHeight(shopId, liftIndex, targetHeight)
@@ -613,6 +636,7 @@ function VRS.SetLiftPresetHeight(shopId, liftIndex, targetHeight)
         return false
     end
 
+    updateLiftAuthorization(getLiftKey(shopId, liftIndex), result)
     return true
 end
 
@@ -627,6 +651,7 @@ function VRS.ApplyLiftState(shopId, liftIndex, state)
     local previousState = VRS.LiftState[liftKey] or {}
     VRS.LiftState[liftKey] = state
     VRS.OnLift[liftKey] = state.vehicleNetId
+    updateLiftAuthorization(liftKey, state)
 
     -- Atualizar veículo anexado
     if state.vehicleNetId then
@@ -655,6 +680,10 @@ function VRS.ApplyLiftState(shopId, liftIndex, state)
     local height = state.height or state.minHeight or Config.Lift.MinHeight or 0.0
     setPlatformHeight(liftKey, height)
     updateVehicleOnLift(liftKey, height)
+
+    if not state.moving then
+        liftAuthorizations[liftKey] = nil
+    end
 end
 
 function VRS.RefreshLiftState(shopId, liftIndex)
@@ -855,9 +884,9 @@ CreateThread(function()
                     if sId and lIdx then
                         lib.callback.await('vrs_mechanic:server:liftCommand', false, sId, lIdx, 'stop')
                     end
+                    liftAuthorizations[liftKey] = nil
                 end
             end
-        end
 
         -- Sincronizar altura com server periodicamente
         if hasMovement then
@@ -876,7 +905,13 @@ CreateThread(function()
                         local lIdx = tonumber(parts[#parts])
                         local sId = table.concat(parts, '_', 1, #parts - 1)
                         if sId and lIdx then
-                            TriggerServerEvent('vrs_mechanic:server:syncLiftHeight', sId, lIdx, h)
+                            local authorization = liftAuthorizations[liftKey]
+                            if not VRS.IsExperimentalEnabled('ServerAuthoritativeLift') or
+                               (authorization and (not authorization.operatorSource or authorization.operatorSource == getClientSource())) then
+                                TriggerServerEvent('vrs_mechanic:server:syncLiftHeight', sId, lIdx, h, authorization and authorization.operationId or nil)
+                            else
+                                VRS.DebugLog('liftAuthority', ('Sync bloqueado no client para %s sem autorização válida.'):format(liftKey))
+                            end
                         end
                     end
                 end

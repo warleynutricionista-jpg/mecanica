@@ -8,6 +8,11 @@ VRS = VRS or {}
 ---@param category string|nil
 ---@return boolean
 function VRS.IsDebugEnabled(category)
+    local debugModules = Config.DebugModules or {}
+    if category and debugModules[category] ~= nil then
+        return debugModules[category] == true
+    end
+
     local debugConfig = Config.Debug or {}
     if category and debugConfig[category] ~= nil then
         return debugConfig[category] == true
@@ -16,12 +21,34 @@ function VRS.IsDebugEnabled(category)
     return debugConfig.enabled == true
 end
 
+--- Retorna se um modo experimental está habilitado
+---@param flag string
+---@return boolean
+function VRS.IsExperimentalEnabled(flag)
+    if Config.SafeMode == true then
+        return false
+    end
+
+    local experimental = Config.Experimental or {}
+    return flag and experimental[flag] == true or false
+end
+
 --- Log de debug opcional e padronizado
 ---@param category string
 ---@param message string
 function VRS.DebugLog(category, message)
     if not VRS.IsDebugEnabled(category) then return end
     print(('[vrs_mechanic][debug][%s] %s'):format(category or 'general', message or ''))
+end
+
+--- Mede e loga tempo de execução de um bloco/loop quando o debug estiver ativo
+---@param category string
+---@param label string
+---@param startedAt number
+function VRS.DebugMeasure(category, label, startedAt)
+    if not startedAt or not VRS.IsDebugEnabled(category) then return end
+    local elapsed = GetGameTimer() - startedAt
+    VRS.DebugLog(category, ('%s levou %dms'):format(label or 'medição', elapsed))
 end
 
 --- Retorna o percentual de uma parte (0-100)

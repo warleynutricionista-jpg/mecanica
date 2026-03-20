@@ -6,6 +6,7 @@ VRS.LiftStates = VRS.LiftStates or {}
 
 local presetFile = Config.Lift.savedPresetFile or 'lift_presets.json'
 local savedLiftHeights = {}
+local liftOperationCounter = 0
 
 -- ============================================================
 -- HELPERS
@@ -37,6 +38,38 @@ end
 
 local function getMovementWatchdogDeadline()
     return GetGameTimer() + math.max(tonumber(Config.Lift.MovementTimeoutMs) or 20000, 5000)
+end
+
+local function isHybridLiftAuthorityEnabled()
+    return VRS.IsExperimentalEnabled and VRS.IsExperimentalEnabled('ServerAuthoritativeLift')
+end
+
+local function nextLiftOperationId(shopId, liftIndex)
+    liftOperationCounter = liftOperationCounter + 1
+    return ('%s:%s:%d:%d'):format(shopId, liftIndex, os.time(), liftOperationCounter)
+end
+
+local function assignLiftOperationState(state, source, direction, targetHeight)
+    if not isHybridLiftAuthorityEnabled() then
+        return state
+    end
+
+    state.operationId = nextLiftOperationId(state.shopId, state.liftIndex)
+    state.operatorSource = source
+    state.operationStartedAt = os.time()
+    state.currentState = state.height
+    state.targetState = targetHeight or direction
+    return state
+end
+
+local function clearLiftOperationState(state)
+    if not state then return state end
+    state.operationId = nil
+    state.operatorSource = nil
+    state.operationStartedAt = nil
+    state.currentState = state.height
+    state.targetState = nil
+    return state
 end
 
 local function getPresetKey(source, shopId, liftIndex)
@@ -96,6 +129,7 @@ local function buildLiftState(shopId, liftIndex)
             state.height = state.minHeight
             state.moving = false
             state.direction = nil
+            clearLiftOperationState(state)
         end
     end
 
@@ -184,6 +218,7 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
     state.maxHeight = metrics.maxHeight
     state.moving = false
     state.direction = nil
+    clearLiftOperationState(state)
     VRS.LiftStates[key] = state
 
     local synced = syncLiftState(shopId, liftIndex)
@@ -225,6 +260,7 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
         moving = false,
         direction = nil,
     }
+    clearLiftOperationState(VRS.LiftStates[key])
 
     syncLiftState(shopId, liftIndex)
     return { success = true }
@@ -244,19 +280,27 @@ lib.callback.register('vrs_mechanic:server:liftCommand', function(source, shopId
     local state = buildLiftState(shopId, liftIndex)
     local metrics = getLiftMetrics(shopId, liftIndex)
 
+    if isHybridLiftAuthorityEnabled() then
+        VRS.DebugLog('liftAuthority', ('Comando %s solicitado para %s por source %s.'):format(command, key, source))
+    end
+
     if command == 'stop' then
         state.moving = false
         state.direction = nil
         state.targetHeight = nil
+        clearLiftOperationState(state)
         VRS.LiftStates[key] = state
         syncLiftState(shopId, liftIndex)
         broadcastMovement(shopId, liftIndex, 'stop')
-        return { success = true }
+        return { success = true, operationId = state.operationId }
     end
 
     -- Validar up/down
     if command == 'up' then
         if Config.Lift.requireVehicleToRaise and not state.vehicleNetId then
+            if isHybridLiftAuthorityEnabled() then
+                VRS.DebugLog('liftAuthority', ('Subida negada para %s: elevador vazio.'):format(key))
+            end
             return { success = false, reason = 'lift_empty' }
         end
         if (state.height or 0.0) >= metrics.maxHeight - 0.01 then
@@ -270,11 +314,17 @@ lib.callback.register('vrs_mechanic:server:liftCommand', function(source, shopId
 
     state.moving = true
     state.direction = command
+    assignLiftOperationState(state, source, command, command)
     VRS.LiftStates[key] = state
     syncLiftState(shopId, liftIndex)
     broadcastMovement(shopId, liftIndex, command)
 
-    return { success = true }
+    return {
+        success = true,
+        operationId = state.operationId,
+        operatorSource = state.operatorSource,
+        operationStartedAt = state.operationStartedAt,
+    }
 end)
 
 -- ============================================================
@@ -289,6 +339,9 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
 
     local key = getLiftKey(shopId, liftIndex)
     local state = buildLiftState(shopId, liftIndex)
+    if isHybridLiftAuthorityEnabled() then
+        VRS.DebugLog('liftAuthority', ('Preset solicitado para %s por source %s.'):format(key, source))
+    end
 
     if state.moving then
         return { success = false, reason = 'lift_busy' }
@@ -315,6 +368,7 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
     state.targetHeight = clamped
     state.minHeight = getLiftMetrics(shopId, liftIndex).minHeight
     state.maxHeight = getLiftMetrics(shopId, liftIndex).maxHeight
+    assignLiftOperationState(state, source, direction, clamped)
     VRS.LiftStates[key] = state
     syncLiftState(shopId, liftIndex)
     broadcastMovement(shopId, liftIndex, direction)
@@ -337,6 +391,7 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
                 currentState.moving = false
                 currentState.direction = nil
                 currentState.targetHeight = nil
+                clearLiftOperationState(currentState)
                 VRS.LiftStates[key] = currentState
                 syncLiftState(shopId, liftIndex)
                 broadcastMovement(shopId, liftIndex, 'stop')
@@ -348,6 +403,7 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
                 currentState.moving = false
                 currentState.direction = nil
                 currentState.targetHeight = nil
+                clearLiftOperationState(currentState)
                 VRS.LiftStates[key] = currentState
                 syncLiftState(shopId, liftIndex)
                 broadcastMovement(shopId, liftIndex, 'stop')
@@ -357,7 +413,12 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
         end
     end)
 
-    return { success = true }
+    return {
+        success = true,
+        operationId = state.operationId,
+        operatorSource = state.operatorSource,
+        operationStartedAt = state.operationStartedAt,
+    }
 end)
 
 -- ============================================================
@@ -412,6 +473,7 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
     state.moving = true
     state.direction = direction
     state.targetHeight = clamped
+    assignLiftOperationState(state, source, direction, clamped)
     VRS.LiftStates[key] = state
     syncLiftState(shopId, liftIndex)
     broadcastMovement(shopId, liftIndex, direction)
@@ -431,6 +493,7 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
                 currentState.moving = false
                 currentState.direction = nil
                 currentState.targetHeight = nil
+                clearLiftOperationState(currentState)
                 VRS.LiftStates[key] = currentState
                 syncLiftState(shopId, liftIndex)
                 broadcastMovement(shopId, liftIndex, 'stop')
@@ -442,6 +505,7 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
                 currentState.moving = false
                 currentState.direction = nil
                 currentState.targetHeight = nil
+                clearLiftOperationState(currentState)
                 VRS.LiftStates[key] = currentState
                 syncLiftState(shopId, liftIndex)
                 broadcastMovement(shopId, liftIndex, 'stop')
@@ -451,7 +515,12 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
         end
     end)
 
-    return { success = true }
+    return {
+        success = true,
+        operationId = state.operationId,
+        operatorSource = state.operatorSource,
+        operationStartedAt = state.operationStartedAt,
+    }
 end)
 
 -- ============================================================
@@ -472,7 +541,7 @@ end
 -- SYNC DE ALTURA DO CLIENT
 -- ============================================================
 
-RegisterNetEvent('vrs_mechanic:server:syncLiftHeight', function(shopId, liftIndex, height)
+RegisterNetEvent('vrs_mechanic:server:syncLiftHeight', function(shopId, liftIndex, height, operationId)
     local src = source
     local ok = validateLiftAccess(src, shopId, liftIndex)
     if not ok then return end
@@ -481,10 +550,22 @@ RegisterNetEvent('vrs_mechanic:server:syncLiftHeight', function(shopId, liftInde
     local state = VRS.LiftStates[key]
     if not state or not state.moving then return end
 
+    if isHybridLiftAuthorityEnabled() then
+        if state.operatorSource and state.operatorSource ~= src then
+            VRS.DebugLog('liftAuthority', ('Sync negado para %s por source %s; owner=%s'):format(key, src, state.operatorSource))
+            return
+        end
+        if state.operationId and operationId and state.operationId ~= operationId then
+            VRS.DebugLog('liftAuthority', ('Sync negado para %s por operationId divergente.'):format(key))
+            return
+        end
+    end
+
     local clampedHeight = clampHeight(height, shopId, liftIndex)
     if clampedHeight == nil then return end
 
     state.height = roundHeight(clampedHeight)
+    state.currentState = state.height
     state.minHeight = state.minHeight or getLiftMetrics(shopId, liftIndex).minHeight
     state.maxHeight = state.maxHeight or getLiftMetrics(shopId, liftIndex).maxHeight
     VRS.LiftStates[key] = state

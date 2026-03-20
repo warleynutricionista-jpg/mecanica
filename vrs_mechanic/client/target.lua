@@ -24,7 +24,8 @@ local function getLiftPanelCoords(lift)
         return lift.controlPanel
     end
 
-    local offset = rotateOffset(Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0), lift.coords.w or 0.0)
+    local metrics = VRS.GetLiftMetrics(lift)
+    local offset = rotateOffset(metrics.interactionOffset or Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0), lift.coords.w or 0.0)
     return vec4(
         lift.coords.x + offset.x,
         lift.coords.y + offset.y,

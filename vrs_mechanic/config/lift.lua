@@ -80,6 +80,122 @@ Config.Lift.AdminCommand = 'liftadmin'
 Config.Lift.MinSpacing = 4.0
 Config.Lift.ValidationDistanceFromShop = 35.0
 Config.Lift.MaxGroundDelta = 0.45
+
+Config.Lift.DebugCommand = 'liftdebug'
+Config.Lift.WorldDetection = {
+    enabled = true,
+    discoverOnStart = true,
+    discoverOnZoneEnter = true,
+    maxDistanceFromShop = 45.0,
+    maxObjectsPerScan = 2048,
+    dedupeDistance = 1.5,
+}
+
+-- ============================================================
+-- REGISTRO UNIVERSAL DE MODELOS
+-- ============================================================
+Config.Lift.ModelDefaults = {
+    label = 'Elevador genérico',
+    family = 'generic',
+    sourceType = 'world',
+    useExistingEntity = true,
+    minHeight = Config.Lift.MinHeight,
+    maxHeight = Config.Lift.MaxHeight,
+    vehicleOffset = vec3(0.0, 0.0, Config.Lift.VehicleZOffset),
+    platformOffset = vec3(0.0, 0.0, 0.0),
+    interactionOffset = Config.Lift.controlPanelOffset,
+    length = 5.0,
+    width = 2.5,
+    fallbackToModelDimensions = true,
+}
+
+Config.Lift.Models = {
+    standard_lift = {
+        model = 'standard_lift',
+        label = 'Elevador padrão VRS',
+        family = 'two_post',
+        sourceType = 'spawned_composite',
+        useExistingEntity = false,
+        platformModel = Config.Lift.PlatformModel,
+        poleModel = Config.Lift.PoleModel,
+        elecBoxModel = Config.Lift.ElecBoxModel,
+        spawnPoles = true,
+        spawnElecBox = true,
+        platformOffset = vec3(0.0, 0.0, 0.0),
+        vehicleOffset = vec3(0.0, 0.0, Config.Lift.VehicleZOffset),
+        interactionOffset = Config.Lift.controlPanelOffset,
+        minHeight = Config.Lift.MinHeight,
+        maxHeight = Config.Lift.MaxHeight,
+        length = 5.0,
+        width = 2.5,
+    },
+    prop_spray_jackframe = {
+        model = 'prop_spray_jackframe',
+        label = 'Spray Jack Frame',
+        family = 'platform',
+        sourceType = 'world_or_spawned',
+        useExistingEntity = true,
+        vehicleOffset = vec3(0.0, 0.0, 0.36),
+        interactionOffset = vec3(1.8, 0.0, 0.0),
+        minHeight = 0.0,
+        maxHeight = 2.1,
+        length = 5.0,
+        width = 2.5,
+    },
+    imp_prop_impexp_carlift_01a = {
+        model = 'imp_prop_impexp_carlift_01a',
+        label = 'Import/Export Lift 01A',
+        family = 'two_post',
+        sourceType = 'world',
+        useExistingEntity = true,
+        vehicleOffset = vec3(0.0, 0.0, 0.5),
+        interactionOffset = vec3(2.0, 0.0, 0.0),
+        minHeight = 0.0,
+        maxHeight = 2.5,
+        length = 5.4,
+        width = 2.8,
+    },
+    imp_prop_impexp_carlift_02a = {
+        model = 'imp_prop_impexp_carlift_02a',
+        label = 'Import/Export Lift 02A',
+        family = 'two_post',
+        sourceType = 'world',
+        useExistingEntity = true,
+        vehicleOffset = vec3(0.0, 0.0, 0.5),
+        interactionOffset = vec3(2.0, 0.0, 0.0),
+        minHeight = 0.0,
+        maxHeight = 2.5,
+        length = 5.6,
+        width = 2.9,
+    },
+    imp_prop_impexp_carlift = {
+        model = 'imp_prop_impexp_carlift',
+        label = 'Import/Export Lift',
+        family = 'two_post',
+        sourceType = 'world',
+        useExistingEntity = true,
+        vehicleOffset = vec3(0.0, 0.0, 0.5),
+        interactionOffset = vec3(2.0, 0.0, 0.0),
+        minHeight = 0.0,
+        maxHeight = 2.5,
+        length = 5.6,
+        width = 2.9,
+    },
+    imp_prop_impexp_carlifts = {
+        model = 'imp_prop_impexp_carlifts',
+        label = 'Import/Export Lift Cluster',
+        family = 'four_post',
+        sourceType = 'world',
+        useExistingEntity = true,
+        vehicleOffset = vec3(0.0, 0.0, 0.45),
+        interactionOffset = vec3(2.4, 0.0, 0.0),
+        minHeight = 0.0,
+        maxHeight = 2.3,
+        length = 5.8,
+        width = 3.2,
+    },
+}
+
 Config.Lift.Editor = {
     moveSpeed = 0.03,
     fineMoveSpeed = 0.01,

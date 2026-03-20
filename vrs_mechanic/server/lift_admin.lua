@@ -5,6 +5,7 @@
 local layoutFile = Config.Lift.LayoutFile or 'lift_layouts.json'
 local savedLayouts = { version = 1, lastId = 0, lifts = {} }
 local baseLiftLayouts = {}
+local discoveredWorldLifts = {}
 
 local function deepCopy(value)
     if type(value) ~= 'table' then return value end
@@ -51,6 +52,13 @@ local function getLiftRecordForSync(lift)
         staticIndex = lift.staticIndex,
         length = lift.length,
         width = lift.width,
+        minHeight = lift.minHeight,
+        maxHeight = lift.maxHeight,
+        sourceType = lift.sourceType,
+        useExistingEntity = lift.useExistingEntity,
+        platformOffset = lift.platformOffset and getSerializedCoords(lift.platformOffset) or nil,
+        vehicleOffset = lift.vehicleOffset and getSerializedCoords(lift.vehicleOffset) or nil,
+        interactionOffset = lift.interactionOffset and getSerializedCoords(lift.interactionOffset) or nil,
         controlPanel = lift.controlPanel and getSerializedCoords(lift.controlPanel) or nil,
         coords = getSerializedCoords(lift.coords),
         metadata = deepCopy(lift.metadata or {}),
@@ -68,6 +76,17 @@ local function getLiftById(shopId, liftId)
     end
 
     return nil, nil
+end
+
+local function getWorldLiftId(shopId, model, coords)
+    local hash = VRS.ResolveModelHash(model) or 0
+    return ('%s_world_%s_%d_%d_%d'):format(
+        shopId,
+        tostring(hash),
+        math.floor((coords.x or 0.0) * 100.0 + 0.5),
+        math.floor((coords.y or 0.0) * 100.0 + 0.5),
+        math.floor((coords.z or 0.0) * 100.0 + 0.5)
+    )
 end
 
 local function shopHasBusyLift(shopId)
@@ -132,6 +151,8 @@ local function normalizeSavedRecord(record)
     record.category = record.category or record.shopId
     record.metadata = type(record.metadata) == 'table' and record.metadata or {}
     record.ownerJob = record.ownerJob or (Config.Shops[record.shopId] and Config.Shops[record.shopId].job) or nil
+    record.minHeight = tonumber(record.minHeight)
+    record.maxHeight = tonumber(record.maxHeight)
     if record.controlPanel then
         record.controlPanel = getSerializedCoords(record.controlPanel)
     end
@@ -152,10 +173,18 @@ local function rebuildLiftLayouts()
             merged.shopId = shopId
             merged.staticIndex = staticIndex
             merged.source = 'static'
+            local profile = VRS.GetLiftModelProfile(merged.model or Config.Lift.DefaultModelName or 'standard_lift')
             merged.model = merged.model or Config.Lift.DefaultModelName or 'standard_lift'
             merged.ownerJob = merged.ownerJob or shop.job
             merged.category = merged.category or shopId
             merged.metadata = type(merged.metadata) == 'table' and merged.metadata or {}
+            merged.minHeight = tonumber(merged.minHeight or profile.minHeight)
+            merged.maxHeight = tonumber(merged.maxHeight or profile.maxHeight)
+            merged.sourceType = merged.sourceType or profile.sourceType or 'spawned'
+            merged.useExistingEntity = merged.useExistingEntity ~= nil and merged.useExistingEntity or profile.useExistingEntity or false
+            merged.platformOffset = deepCopy(merged.platformOffset or profile.platformOffset)
+            merged.vehicleOffset = deepCopy(merged.vehicleOffset or profile.vehicleOffset)
+            merged.interactionOffset = deepCopy(merged.interactionOffset or profile.interactionOffset)
 
             local override = savedLayouts.lifts[merged.id]
             if override then
@@ -169,6 +198,13 @@ local function rebuildLiftLayouts()
                     merged.ownerJob = override.ownerJob or merged.ownerJob
                     merged.category = override.category or merged.category
                     merged.metadata = deepCopy(override.metadata or merged.metadata)
+                    merged.minHeight = override.minHeight or merged.minHeight
+                    merged.maxHeight = override.maxHeight or merged.maxHeight
+                    merged.sourceType = override.sourceType or merged.sourceType
+                    merged.useExistingEntity = override.useExistingEntity ~= nil and override.useExistingEntity or merged.useExistingEntity
+                    merged.platformOffset = deepCopy(override.platformOffset or merged.platformOffset)
+                    merged.vehicleOffset = deepCopy(override.vehicleOffset or merged.vehicleOffset)
+                    merged.interactionOffset = deepCopy(override.interactionOffset or merged.interactionOffset)
                 else
                     merged = nil
                 end
@@ -176,6 +212,62 @@ local function rebuildLiftLayouts()
 
             if merged then
                 rebuilt[#rebuilt + 1] = merged
+            end
+        end
+
+        local worldLifts = discoveredWorldLifts[shopId] or {}
+        table.sort(worldLifts, function(a, b)
+            return a.id < b.id
+        end)
+
+        for _, worldLift in ipairs(worldLifts) do
+            local merged = normalizeSavedRecord(deepCopy(worldLift))
+            local override = savedLayouts.lifts[merged.id]
+            if override then
+                override = normalizeSavedRecord(deepCopy(override))
+                if override and not override.removed then
+                    merged.coords = getSerializedCoords(override.coords, override.heading)
+                    merged.length = override.length or merged.length
+                    merged.width = override.width or merged.width
+                    merged.controlPanel = override.controlPanel or merged.controlPanel
+                    merged.model = override.model or merged.model
+                    merged.ownerJob = override.ownerJob or merged.ownerJob
+                    merged.category = override.category or merged.category
+                    merged.metadata = deepCopy(override.metadata or merged.metadata)
+                    merged.minHeight = override.minHeight or merged.minHeight
+                    merged.maxHeight = override.maxHeight or merged.maxHeight
+                    merged.sourceType = override.sourceType or merged.sourceType
+                    merged.useExistingEntity = override.useExistingEntity ~= nil and override.useExistingEntity or merged.useExistingEntity
+                    merged.platformOffset = deepCopy(override.platformOffset or merged.platformOffset)
+                    merged.vehicleOffset = deepCopy(override.vehicleOffset or merged.vehicleOffset)
+                    merged.interactionOffset = deepCopy(override.interactionOffset or merged.interactionOffset)
+                else
+                    merged = nil
+                end
+            end
+
+            if merged then
+                rebuilt[#rebuilt + 1] = {
+                    id = merged.id,
+                    model = merged.model,
+                    ownerJob = merged.ownerJob,
+                    shopId = merged.shopId,
+                    category = merged.category,
+                    source = 'world',
+                    staticIndex = nil,
+                    length = merged.length,
+                    width = merged.width,
+                    controlPanel = merged.controlPanel,
+                    coords = getSerializedCoords(merged.coords),
+                    metadata = deepCopy(merged.metadata or {}),
+                    minHeight = merged.minHeight,
+                    maxHeight = merged.maxHeight,
+                    sourceType = merged.sourceType or 'world',
+                    useExistingEntity = merged.useExistingEntity ~= false,
+                    interactionOffset = merged.interactionOffset,
+                    platformOffset = merged.platformOffset,
+                    vehicleOffset = merged.vehicleOffset,
+                }
             end
         end
 
@@ -204,6 +296,13 @@ local function rebuildLiftLayouts()
                 controlPanel = record.controlPanel,
                 coords = getSerializedCoords(record.coords),
                 metadata = deepCopy(record.metadata or {}),
+                minHeight = record.minHeight,
+                maxHeight = record.maxHeight,
+                sourceType = record.sourceType or 'spawned',
+                useExistingEntity = record.useExistingEntity or false,
+                interactionOffset = record.interactionOffset,
+                platformOffset = record.platformOffset,
+                vehicleOffset = record.vehicleOffset,
             }
         end
 
@@ -357,7 +456,7 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
         local record = savedLayouts.lifts[recordId] or {
             id = recordId,
             shopId = shopId,
-            source = existing.source == 'custom' and 'custom' or 'static',
+            source = existing.source or 'static',
             staticIndex = existing.staticIndex,
             sortOrder = existing.metadata and existing.metadata.sortOrder,
         }
@@ -372,6 +471,13 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
         record.ownerJob = payload.ownerJob or existing.ownerJob or shop.job
         record.category = payload.category or existing.category or shopId
         record.metadata = deepCopy(payload.metadata or existing.metadata or {})
+        record.minHeight = tonumber(payload.minHeight or existing.minHeight)
+        record.maxHeight = tonumber(payload.maxHeight or existing.maxHeight)
+        record.sourceType = payload.sourceType or existing.sourceType
+        record.useExistingEntity = payload.useExistingEntity ~= nil and payload.useExistingEntity or existing.useExistingEntity
+        record.platformOffset = deepCopy(payload.platformOffset or existing.platformOffset)
+        record.vehicleOffset = deepCopy(payload.vehicleOffset or existing.vehicleOffset)
+        record.interactionOffset = deepCopy(payload.interactionOffset or existing.interactionOffset)
         record.removed = false
         savedLayouts.lifts[recordId] = record
     else
@@ -389,6 +495,13 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
             ownerJob = payload.ownerJob or shop.job,
             category = payload.category or shopId,
             metadata = deepCopy(payload.metadata or {}),
+            minHeight = tonumber(payload.minHeight),
+            maxHeight = tonumber(payload.maxHeight),
+            sourceType = payload.sourceType or 'spawned',
+            useExistingEntity = payload.useExistingEntity or false,
+            platformOffset = deepCopy(payload.platformOffset),
+            vehicleOffset = deepCopy(payload.vehicleOffset),
+            interactionOffset = deepCopy(payload.interactionOffset),
             removed = false,
             sortOrder = os.time() + savedLayouts.lastId,
         }
@@ -426,7 +539,7 @@ lib.callback.register('vrs_mechanic:server:deleteLiftLayout', function(source, s
         local record = savedLayouts.lifts[liftId] or {
             id = liftId,
             shopId = shopId,
-            source = 'static',
+            source = existing.source or 'static',
             staticIndex = existing.staticIndex,
         }
         record.removed = true
@@ -450,6 +563,44 @@ end)
 
 RegisterNetEvent('vrs_mechanic:server:requestLiftLayouts', function()
     syncLayouts(source)
+end)
+
+RegisterNetEvent('vrs_mechanic:server:registerWorldLifts', function(shopId, lifts)
+    if not Config.Lift.WorldDetection or not Config.Lift.WorldDetection.enabled then return end
+    if type(shopId) ~= 'string' or type(lifts) ~= 'table' then return end
+    if not Config.Shops[shopId] then return end
+
+    discoveredWorldLifts[shopId] = {}
+
+    for _, lift in ipairs(lifts) do
+        if type(lift) == 'table' and lift.coords and lift.model then
+            local profile = VRS.GetLiftModelProfile(lift.model)
+            local id = lift.id or getWorldLiftId(shopId, lift.model, lift.coords)
+            discoveredWorldLifts[shopId][#discoveredWorldLifts[shopId] + 1] = {
+                id = id,
+                shopId = shopId,
+                source = 'world',
+                model = lift.model,
+                coords = getSerializedCoords(lift.coords, lift.coords.w),
+                length = tonumber(lift.length) or profile.length or 5.0,
+                width = tonumber(lift.width) or profile.width or 2.5,
+                ownerJob = Config.Shops[shopId].job,
+                category = shopId,
+                metadata = deepCopy(lift.metadata or {}),
+                minHeight = tonumber(lift.minHeight or profile.minHeight),
+                maxHeight = tonumber(lift.maxHeight or profile.maxHeight),
+                sourceType = 'world',
+                useExistingEntity = true,
+                platformOffset = deepCopy(lift.platformOffset or profile.platformOffset),
+                vehicleOffset = deepCopy(lift.vehicleOffset or profile.vehicleOffset),
+                interactionOffset = deepCopy(lift.interactionOffset or profile.interactionOffset),
+            }
+        end
+    end
+
+    rebuildLiftLayouts()
+    clearShopLiftStates(shopId)
+    syncLayouts()
 end)
 
 CreateThread(function()

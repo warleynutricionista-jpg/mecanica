@@ -19,10 +19,20 @@ local function roundHeight(value)
     return tonumber(('%0.3f'):format(value or 0.0)) or 0.0
 end
 
-local function clampHeight(height)
+local function getLiftEntry(shopId, liftIndex)
+    local shop = Config.Shops[shopId]
+    return shop and shop.lifts and shop.lifts[liftIndex] or nil
+end
+
+local function getLiftMetrics(shopId, liftIndex)
+    return VRS.GetLiftMetrics(getLiftEntry(shopId, liftIndex) or {})
+end
+
+local function clampHeight(height, shopId, liftIndex)
     local numericHeight = tonumber(height)
     if not numericHeight then return nil end
-    return VRS.Clamp(numericHeight, Config.Lift.MinHeight or 0.0, Config.Lift.MaxHeight or 2.1)
+    local metrics = getLiftMetrics(shopId, liftIndex)
+    return VRS.Clamp(numericHeight, metrics.minHeight, metrics.maxHeight)
 end
 
 local function getPresetKey(source, shopId, liftIndex)
@@ -56,21 +66,22 @@ end
 
 local function buildLiftState(shopId, liftIndex)
     local key = getLiftKey(shopId, liftIndex)
+    local metrics = getLiftMetrics(shopId, liftIndex)
     local state = VRS.LiftStates[key] or {
         shopId = shopId,
         liftIndex = liftIndex,
-        height = Config.Lift.MinHeight or 0.0,
-        minHeight = Config.Lift.MinHeight or 0.0,
-        maxHeight = Config.Lift.MaxHeight or 2.1,
+        height = metrics.minHeight,
+        minHeight = metrics.minHeight,
+        maxHeight = metrics.maxHeight,
         vehicleNetId = nil,
         plate = nil,
         moving = false,
         direction = nil,
     }
 
-    state.minHeight = Config.Lift.MinHeight or 0.0
-    state.maxHeight = Config.Lift.MaxHeight or 2.1
-    state.height = clampHeight(state.height) or state.minHeight
+    state.minHeight = metrics.minHeight
+    state.maxHeight = metrics.maxHeight
+    state.height = clampHeight(state.height, shopId, liftIndex) or state.minHeight
 
     -- Validar que o veículo ainda existe
     if state.vehicleNetId and state.vehicleNetId ~= 0 then
@@ -163,7 +174,7 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
 
     state.vehicleNetId = netId
     state.plate = plate
-    state.height = Config.Lift.MinHeight or 0.0
+    state.height = getLiftMetrics(shopId, liftIndex).minHeight
     state.moving = false
     state.direction = nil
     VRS.LiftStates[key] = state
@@ -191,16 +202,16 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
     end
 
     local tolerance = 0.05
-    if (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + tolerance) then
+    if (state.height or 0.0) > ((getLiftMetrics(shopId, liftIndex).minHeight) + tolerance) then
         return { success = false, reason = 'lift_not_lowered' }
     end
 
     VRS.LiftStates[key] = {
         shopId = shopId,
         liftIndex = liftIndex,
-        height = Config.Lift.MinHeight or 0.0,
-        minHeight = Config.Lift.MinHeight or 0.0,
-        maxHeight = Config.Lift.MaxHeight or 2.1,
+        height = getLiftMetrics(shopId, liftIndex).minHeight,
+        minHeight = getLiftMetrics(shopId, liftIndex).minHeight,
+        maxHeight = getLiftMetrics(shopId, liftIndex).maxHeight,
         vehicleNetId = nil,
         plate = nil,
         moving = false,
@@ -238,11 +249,11 @@ lib.callback.register('vrs_mechanic:server:liftCommand', function(source, shopId
         if Config.Lift.requireVehicleToRaise and not state.vehicleNetId then
             return { success = false, reason = 'lift_empty' }
         end
-        if (state.height or 0.0) >= (Config.Lift.MaxHeight or 2.1) - 0.01 then
+        if (state.height or 0.0) >= (getLiftMetrics(shopId, liftIndex).maxHeight) - 0.01 then
             return { success = false, reason = 'already_top' }
         end
     elseif command == 'down' then
-        if (state.height or 0.0) <= (Config.Lift.MinHeight or 0.0) + 0.01 then
+        if (state.height or 0.0) <= (getLiftMetrics(shopId, liftIndex).minHeight) + 0.01 then
             return { success = false, reason = 'already_bottom' }
         end
     end
@@ -273,12 +284,12 @@ lib.callback.register('vrs_mechanic:server:setLiftHeight', function(source, shop
         return { success = false, reason = 'lift_busy' }
     end
 
-    local clamped = clampHeight(targetHeight)
+    local clamped = clampHeight(targetHeight, shopId, liftIndex)
     if clamped == nil then
         return { success = false, reason = 'invalid_height' }
     end
 
-    if clamped > (Config.Lift.MinHeight or 0.0) + 0.01 and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
+    if clamped > (getLiftMetrics(shopId, liftIndex).minHeight) + 0.01 and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
         return { success = false, reason = 'lift_empty' }
     end
 
@@ -336,7 +347,7 @@ lib.callback.register('vrs_mechanic:server:saveLiftHeight', function(source, sho
     local presetKey = getPresetKey(source, shopId, liftIndex)
     if not presetKey then return { success = false, reason = 'no_access' } end
 
-    savedLiftHeights[presetKey] = clampHeight(state.height) or (Config.Lift.MinHeight or 0.0)
+    savedLiftHeights[presetKey] = clampHeight(state.height, shopId, liftIndex) or getLiftMetrics(shopId, liftIndex).minHeight
     persistSavedHeights()
 
     return {
@@ -361,9 +372,9 @@ lib.callback.register('vrs_mechanic:server:goToSavedLiftHeight', function(source
     if state.moving then return { success = false, reason = 'lift_busy' } end
 
     local targetHeight = savedLiftHeights[presetKey]
-    local clamped = clampHeight(targetHeight)
+    local clamped = clampHeight(targetHeight, shopId, liftIndex)
     if clamped == nil then return { success = false, reason = 'invalid_height' } end
-    if clamped > (Config.Lift.MinHeight or 0.0) + 0.01 and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
+    if clamped > (getLiftMetrics(shopId, liftIndex).minHeight) + 0.01 and not state.vehicleNetId and Config.Lift.requireVehicleToRaise then
         return { success = false, reason = 'lift_empty' }
     end
 
@@ -457,6 +468,13 @@ if not VRS.LiftAdminAvailable then
                     staticIndex = lift.staticIndex or index,
                     length = lift.length,
                     width = lift.width,
+                    minHeight = lift.minHeight,
+                    maxHeight = lift.maxHeight,
+                    sourceType = lift.sourceType,
+                    useExistingEntity = lift.useExistingEntity,
+                    platformOffset = lift.platformOffset and { x = lift.platformOffset.x, y = lift.platformOffset.y, z = lift.platformOffset.z } or nil,
+                    vehicleOffset = lift.vehicleOffset and { x = lift.vehicleOffset.x, y = lift.vehicleOffset.y, z = lift.vehicleOffset.z } or nil,
+                    interactionOffset = lift.interactionOffset and { x = lift.interactionOffset.x, y = lift.interactionOffset.y, z = lift.interactionOffset.z } or nil,
                     controlPanel = lift.controlPanel and {
                         x = lift.controlPanel.x,
                         y = lift.controlPanel.y,

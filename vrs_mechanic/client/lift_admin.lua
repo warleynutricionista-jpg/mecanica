@@ -22,6 +22,11 @@ local function round3(value)
     return tonumber(('%0.3f'):format(value or 0.0)) or 0.0
 end
 
+local function serializeVec3(value)
+    if not value then return nil end
+    return { x = value.x, y = value.y, z = value.z }
+end
+
 local function prepareModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
     if HasModelLoaded(hash) then return hash end
@@ -70,12 +75,25 @@ local function destroyPreview(preview)
     end
 end
 
-local function createLiftPreview(coords, heading)
-    local platform = createPreviewProp(Config.Lift.PlatformModel, coords, heading)
+local function createLiftPreview(coords, heading, modelName)
+    local profile = VRS.GetLiftModelProfile(modelName or Config.Lift.DefaultModelName)
+    local primaryModel = profile.platformModel or profile.model or Config.Lift.PlatformModel
+    local platform = createPreviewProp(primaryModel, coords, heading)
     if not platform or platform == 0 then return nil end
 
+    if profile.sourceType ~= 'spawned_composite' and (modelName and modelName ~= 'standard_lift') then
+        return {
+            platform = platform,
+            poles = {},
+            elecbox = nil,
+            composite = false,
+            model = modelName,
+            profile = profile,
+        }
+    end
+
     local poles = {}
-    if Config.Lift.SpawnPoles then
+    if profile.spawnPoles ~= false and Config.Lift.SpawnPoles then
         local offsets = {
             vec3(1.43, -2.88, Config.Lift.PoleZOffset or -0.30),
             vec3(-1.43, -2.88, Config.Lift.PoleZOffset or -0.30),
@@ -86,21 +104,24 @@ local function createLiftPreview(coords, heading)
         for i, offset in ipairs(offsets) do
             local poleCoords = GetOffsetFromEntityInWorldCoords(platform, offset.x, offset.y, offset.z)
             local poleHeading = (i == 1 or i == 4) and (heading - 180.0) or heading
-            poles[#poles + 1] = createPreviewProp(Config.Lift.PoleModel, poleCoords, poleHeading)
+            poles[#poles + 1] = createPreviewProp(profile.poleModel or Config.Lift.PoleModel, poleCoords, poleHeading)
         end
     end
 
     local elecbox = nil
-    if Config.Lift.SpawnElecBox then
-        local offset = Config.Lift.ElecBoxOffset or vec3(0.0, -3.3, -0.7)
+    if profile.spawnElecBox ~= false and Config.Lift.SpawnElecBox then
+        local offset = profile.elecBoxOffset or Config.Lift.ElecBoxOffset or vec3(0.0, -3.3, -0.7)
         local elecCoords = GetOffsetFromEntityInWorldCoords(platform, offset.x, offset.y, offset.z)
-        elecbox = createPreviewProp(Config.Lift.ElecBoxModel, elecCoords, heading)
+        elecbox = createPreviewProp(profile.elecBoxModel or Config.Lift.ElecBoxModel, elecCoords, heading)
     end
 
     return {
         platform = platform,
         poles = poles,
         elecbox = elecbox,
+        composite = true,
+        model = modelName,
+        profile = profile,
     }
 end
 
@@ -110,7 +131,7 @@ local function setPreviewTransform(preview, coords, heading)
     SetEntityCoordsNoOffset(preview.platform, coords.x, coords.y, coords.z, false, false, false)
     SetEntityHeading(preview.platform, heading)
 
-    if Config.Lift.SpawnPoles then
+    if preview.composite and Config.Lift.SpawnPoles then
         local offsets = {
             vec3(1.43, -2.88, Config.Lift.PoleZOffset or -0.30),
             vec3(-1.43, -2.88, Config.Lift.PoleZOffset or -0.30),
@@ -129,7 +150,7 @@ local function setPreviewTransform(preview, coords, heading)
     end
 
     if preview.elecbox and DoesEntityExist(preview.elecbox) then
-        local offset = Config.Lift.ElecBoxOffset or vec3(0.0, -3.3, -0.7)
+        local offset = (preview.profile and preview.profile.elecBoxOffset) or Config.Lift.ElecBoxOffset or vec3(0.0, -3.3, -0.7)
         local elecCoords = GetOffsetFromEntityInWorldCoords(preview.platform, offset.x, offset.y, offset.z)
         SetEntityCoordsNoOffset(preview.elecbox, elecCoords.x, elecCoords.y, elecCoords.z, false, false, false)
         SetEntityHeading(preview.elecbox, heading)
@@ -296,7 +317,7 @@ local function deleteLiftLayout(shopId, liftId)
     return true
 end
 
-local function startLiftEditor(shopId, existingLift)
+local function startLiftEditor(shopId, existingLift, requestedModel)
     if editorState then return end
 
     local shop = Config.Shops[shopId]
@@ -315,7 +336,7 @@ local function startLiftEditor(shopId, existingLift)
         startHeading = GetEntityHeading(cache.ped)
     end
 
-    local preview = createLiftPreview(startCoords, startHeading)
+    local preview = createLiftPreview(startCoords, startHeading, requestedModel or (existingLift and existingLift.model) or Config.Lift.DefaultModelName)
     if not preview then
         lib.notify({ title = 'Elevador', description = 'Não foi possível criar o preview do elevador.', type = 'error' })
         return
@@ -325,6 +346,7 @@ local function startLiftEditor(shopId, existingLift)
         shopId = shopId,
         lift = existingLift,
         preview = preview,
+        requestedModel = requestedModel or (existingLift and existingLift.model) or Config.Lift.DefaultModelName,
         heading = startHeading,
         baseCoords = startCoords,
         zOffset = startCoords.z - getGroundZ(startCoords),
@@ -406,12 +428,19 @@ local function startLiftEditor(shopId, existingLift)
                     local payload = {
                         shopId = editorState.shopId,
                         liftId = editorState.lift and editorState.lift.id or nil,
-                        model = editorState.lift and editorState.lift.model or Config.Lift.DefaultModelName,
+                        model = editorState.lift and editorState.lift.model or editorState.requestedModel or Config.Lift.DefaultModelName,
                         ownerJob = shop.job,
                         category = editorState.shopId,
                         length = editorState.lift and editorState.lift.length or 5.0,
                         width = editorState.lift and editorState.lift.width or 2.5,
                         metadata = editorState.lift and editorState.lift.metadata or {},
+                        minHeight = (editorState.lift and editorState.lift.minHeight) or (preview.profile and preview.profile.minHeight) or Config.Lift.MinHeight,
+                        maxHeight = (editorState.lift and editorState.lift.maxHeight) or (preview.profile and preview.profile.maxHeight) or Config.Lift.MaxHeight,
+                        sourceType = (editorState.lift and editorState.lift.sourceType) or (preview.profile and preview.profile.sourceType) or 'spawned',
+                        useExistingEntity = (editorState.lift and editorState.lift.useExistingEntity) or false,
+                        platformOffset = serializeVec3((editorState.lift and editorState.lift.platformOffset) or (preview.profile and preview.profile.platformOffset) or vec3(0.0, 0.0, 0.0)),
+                        vehicleOffset = serializeVec3((editorState.lift and editorState.lift.vehicleOffset) or (preview.profile and preview.profile.vehicleOffset) or vec3(0.0, 0.0, Config.Lift.VehicleZOffset or 0.36)),
+                        interactionOffset = serializeVec3((editorState.lift and editorState.lift.interactionOffset) or (preview.profile and preview.profile.interactionOffset) or Config.Lift.controlPanelOffset or vec3(1.9, 0.0, 0.0)),
                         coords = {
                             x = round3(finalCoords.x),
                             y = round3(finalCoords.y),
@@ -446,6 +475,32 @@ local function startLiftEditor(shopId, existingLift)
     end)
 end
 
+local function selectLiftModelForCreation()
+    local options = {}
+    for profileName, profile in pairs(Config.Lift.Models or {}) do
+        options[#options + 1] = {
+            label = profile.label or profileName,
+            value = profile.model or profileName,
+        }
+    end
+
+    table.sort(options, function(a, b)
+        return a.label < b.label
+    end)
+
+    local selected = lib.inputDialog('Novo elevador', {
+        {
+            type = 'select',
+            label = 'Modelo do elevador',
+            options = options,
+            default = Config.Lift.DefaultModelName,
+            required = true,
+        },
+    })
+
+    return selected and selected[1] or nil
+end
+
 local function openShopAdminMenu(shopId)
     local shop = Config.Shops[shopId]
     if not shop then return end
@@ -457,7 +512,10 @@ local function openShopAdminMenu(shopId)
             description = 'Criar um novo elevador usando o modo de posicionamento.',
             icon = 'fas fa-plus',
             onSelect = function()
-                startLiftEditor(shopId, nil)
+                local selectedModel = selectLiftModelForCreation()
+                if selectedModel then
+                    startLiftEditor(shopId, nil, selectedModel)
+                end
             end,
         },
         {
@@ -606,6 +664,79 @@ function VRS.OpenLiftAdminMenu(shopId, liftId)
     lib.showContext('vrs_lift_admin_root')
 end
 
+
+local function debugNearestLift()
+    local shopId = VRS.CurrentShop or VRS.GetPlayerShopId()
+    local lift = VRS.GetNearestCompatibleWorldLift and VRS.GetNearestCompatibleWorldLift(15.0, shopId)
+    if not lift then
+        lib.notify({ title = 'Lift Debug', description = 'Nenhum elevador compatível encontrado próximo.', type = 'error' })
+        return
+    end
+
+    local vehicle, vehicleDist = VRS.GetClosestVehicle(8.0)
+    local vehicleText = 'Sem veículo próximo'
+    if vehicle then
+        local vehCoords = GetEntityCoords(vehicle)
+        vehicleText = ('Veículo %.2fm | offset %.2f %.2f %.2f'):format(
+            vehicleDist or 0.0,
+            vehCoords.x - lift.coords.x,
+            vehCoords.y - lift.coords.y,
+            vehCoords.z - lift.coords.z
+        )
+    end
+
+    local snippet = table.concat({
+        ('["%s"] = {'):format(lift.model),
+        ('    model = "%s",'):format(lift.model),
+        ('    label = "%s",'):format(lift.model),
+        '    family = "generic",',
+        '    sourceType = "world",',
+        '    useExistingEntity = true,',
+        ('    minHeight = %.2f,'):format(lift.minHeight or 0.0),
+        ('    maxHeight = %.2f,'):format(lift.maxHeight or 2.1),
+        ('    length = %.2f,'):format(lift.length or 5.0),
+        ('    width = %.2f,'):format(lift.width or 2.5),
+        ('    vehicleOffset = vec3(%.2f, %.2f, %.2f),'):format(
+            (lift.vehicleOffset and lift.vehicleOffset.x or 0.0),
+            (lift.vehicleOffset and lift.vehicleOffset.y or 0.0),
+            (lift.vehicleOffset and lift.vehicleOffset.z or (Config.Lift.VehicleZOffset or 0.36))
+        ),
+        ('    platformOffset = vec3(%.2f, %.2f, %.2f),'):format(
+            (lift.platformOffset and lift.platformOffset.x or 0.0),
+            (lift.platformOffset and lift.platformOffset.y or 0.0),
+            (lift.platformOffset and lift.platformOffset.z or 0.0)
+        ),
+        ('    interactionOffset = vec3(%.2f, %.2f, %.2f),'):format(
+            (lift.interactionOffset and lift.interactionOffset.x or 1.9),
+            (lift.interactionOffset and lift.interactionOffset.y or 0.0),
+            (lift.interactionOffset and lift.interactionOffset.z or 0.0)
+        ),
+        '},',
+    }, '\n')
+
+    if lib.setClipboard then
+        lib.setClipboard(snippet)
+    end
+
+    print(('[vrs_mechanic] Lift Debug | model=%s | coords=%.3f %.3f %.3f | heading=%.2f | size=%.2f x %.2f | %s'):format(
+        lift.model,
+        lift.coords.x,
+        lift.coords.y,
+        lift.coords.z,
+        lift.coords.w or 0.0,
+        lift.width or 0.0,
+        lift.length or 0.0,
+        vehicleText
+    ))
+    print(snippet)
+
+    lib.notify({ title = 'Lift Debug', description = ('Modelo %s detectado. Snippet enviado para clipboard/console.'):format(lift.model), type = 'inform' })
+end
+
 RegisterCommand(Config.Lift.AdminCommand or 'liftadmin', function()
     VRS.OpenLiftAdminMenu()
+end, false)
+
+RegisterCommand(Config.Lift.DebugCommand or 'liftdebug', function()
+    debugNearestLift()
 end, false)

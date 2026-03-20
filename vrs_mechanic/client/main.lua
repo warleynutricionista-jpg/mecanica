@@ -173,6 +173,17 @@ function VRS.GetClosestVehicle(maxDist)
     return closest, closestDist
 end
 
+--- Valida se um ponto está dentro da área principal da oficina
+---@param shopId string
+---@param coords vector3
+---@return boolean
+function VRS.IsPointInsideShopZone(shopId, coords)
+    local shop = Config.Shops[shopId]
+    local zone = shop and shop.zones and shop.zones.main
+    if not zone then return false end
+    return #(vec3(coords.x, coords.y, coords.z) - zone.coords) <= math.max(zone.size.x, zone.size.y)
+end
+
 --- Verifica se jogador tem o job de mecânico
 ---@return boolean
 function VRS.IsMechanic()

@@ -42,6 +42,9 @@ local function createShopZones(shopId, shop)
         onEnter = function()
             VRS.CurrentShop = shopId
             VRS.InShopZone = true
+            if VRS.ScanWorldLifts and Config.Lift.WorldDetection and Config.Lift.WorldDetection.discoverOnZoneEnter then
+                VRS.ScanWorldLifts(shopId)
+            end
         end,
         onExit = function()
             if VRS.CurrentShop == shopId then

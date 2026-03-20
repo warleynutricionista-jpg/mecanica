@@ -71,6 +71,7 @@ Config.Lift.levels = {
 Config.Lift.requireDuty = true
 Config.Lift.AdminAce = 'group.admin' -- ACE opcional para permitir gestão total dos elevadores
 Config.Lift.AdminRequireDuty = true
+Config.Lift.Debug = false
 
 -- ============================================================
 -- ADMIN / EDIÇÃO IN-GAME
@@ -78,9 +79,30 @@ Config.Lift.AdminRequireDuty = true
 Config.Lift.DefaultModelName = 'standard_lift'
 Config.Lift.LayoutFile = 'lift_layouts.json'
 Config.Lift.AdminCommand = 'liftadmin'
+Config.Lift.AdminCommands = {
+    Config.Lift.AdminCommand,
+    'elevadorcarro',
+}
 Config.Lift.MinSpacing = 4.0
 Config.Lift.ValidationDistanceFromShop = 35.0
 Config.Lift.MaxGroundDelta = 0.45
+
+Config.Lift.Management = Config.Lift.Management or {
+    requireDuty = Config.Lift.AdminRequireDuty,
+    allowAdminAce = true,
+    ace = Config.Lift.AdminAce,
+    allowShopManagers = true,
+    allowBoss = true,
+    allowAuthorizedMechanics = true,
+    defaultMinGrade = 0,
+    debug = false,
+    jobs = {
+        mechanic = {
+            minGrade = 0,
+            bossOnly = false,
+        },
+    },
+}
 
 Config.Lift.DebugCommand = 'liftdebug'
 Config.Lift.WorldDetection = {

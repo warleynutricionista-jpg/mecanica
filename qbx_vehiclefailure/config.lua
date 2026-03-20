@@ -43,6 +43,9 @@ BackEngineVehicles = {
 	Config.Paid = true
 	Config.Price = 750
     Config.FuelScript = 'cdn-fuel'
+    Config.EnableVrsMechanicIntegration = true
+    Config.VrsIntegrationMode = 'mechanic-driven' -- legacy | hybrid | mechanic-driven
+    Config.BlockRepairKitDuringMechanicService = true
 
 cfg = {
 	deformationMultiplier = -1,					-- How much should the vehicle visually deform from a collision. Range 0.0 to 10.0 Where 0.0 is no deformation and 10.0 is 10x deformation. -1 = Don't touch. Visual damage does not sync well to other players.

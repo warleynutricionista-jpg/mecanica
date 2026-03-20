@@ -51,8 +51,17 @@ function VRS.OpenStash(shopId)
 end
 
 function VRS.OpenLiftMenu(shopId, liftIndex)
-    local shop = Config.Shops[shopId]
-    if not shop then return end
+    local resolvedLift, resolveReason = VRS.ResolveLiftReference(shopId, liftIndex)
+    if not resolvedLift then
+        VRS.LiftDebugLog('liftMenu', ('Falha ao resolver elevador para abrir menu. shop=%s lift=%s reason=%s'):format(tostring(shopId), tostring(liftIndex), tostring(resolveReason)))
+        lib.notify({ title = 'Elevador', description = 'Não foi possível localizar este elevador.', type = 'error' })
+        return
+    end
+
+    shopId = resolvedLift.shopId
+    liftIndex = resolvedLift.liftIndex
+
+    local shop = resolvedLift.shop
 
     if shop.type == 'owned' then
         if not VRS.IsMechanic() and shop.job then
@@ -65,7 +74,14 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         end
     end
 
-    local liftKey = VRS.GetLiftKey(shopId, liftIndex)
+    local liftKey = resolvedLift.liftKey
+    if not liftKey then
+        VRS.LiftDebugLog('liftMenu', ('Chave do elevador indisponível. shop=%s lift=%s'):format(tostring(shopId), tostring(liftIndex)))
+        lib.notify({ title = 'Elevador', description = 'Falha ao resolver a chave do elevador.', type = 'error' })
+        return
+    end
+
+    VRS.LiftDebugLog('liftMenu', ('Abrindo menu do elevador %s para shop=%s index=%s'):format(liftKey, shopId, liftIndex))
     local state = VRS.RefreshLiftState(shopId, liftIndex) or (VRS.LiftState and VRS.LiftState[liftKey]) or { height = Config.Lift.MinHeight or 0.0, minHeight = Config.Lift.MinHeight or 0.0 }
     local vehicleNetId = state.vehicleNetId
     local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
@@ -157,7 +173,7 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         description = 'Criar, editar, listar ou remover elevadores desta oficina.',
         icon = 'fas fa-screwdriver-wrench',
         onSelect = function()
-            local lift = shop.lifts and shop.lifts[liftIndex]
+            local lift = resolvedLift.lift
             VRS.OpenLiftAdminMenu(shopId, lift and lift.id or nil)
         end,
     }
@@ -252,7 +268,12 @@ function VRS.RemoveFromLift(shopId, liftIndex, vehicle)
     requestControl(vehicle)
     FreezeEntityPosition(vehicle, false)
 
-    local lift = Config.Shops[shopId].lifts[liftIndex]
+    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
+    local lift = resolvedLift and resolvedLift.lift or (Config.Shops[shopId] and Config.Shops[shopId].lifts and Config.Shops[shopId].lifts[liftIndex]) or nil
+    if not lift then
+        lib.notify({ title = 'Elevador', description = 'Não foi possível localizar o elevador para finalizar a remoção.', type = 'error' })
+        return
+    end
     local exitOffset = Config.Lift.exitOffset or vec3(3.0, 0.0, 0.0)
     local exitCoords = GetOffsetFromEntityInWorldCoords(vehicle, exitOffset.x, exitOffset.y, exitOffset.z)
     SetEntityCoords(vehicle, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)

@@ -34,18 +34,49 @@ local DamageComponents = {
 	'brakes',
 }
 
+local function isVrsMechanicActive()
+    return VRSFailureAdapter.IsActive()
+end
+
+local function getVrsIntegrationMode()
+    return VRSFailureAdapter.GetIntegrationMode()
+end
+
+local function isMechanicDrivenMode()
+    return VRSFailureAdapter.IsMechanicDrivenMode()
+end
+
+local function getMechanicBridgeState(veh)
+    return VRSFailureAdapter.GetMechanicBridgeState(veh)
+end
+
+local function notifyMechanicRestriction(reason)
+    VRSFailureAdapter.NotifyMechanicRestriction(reason)
+end
+
+local function canUseRepairFlow(veh)
+    return VRSFailureAdapter.CanUseRepairFlow(veh)
+end
+
+local function syncMechanicRepairState(veh, engineHealth)
+    VRSFailureAdapter.SyncMechanicRepairState(veh, engineHealth)
+end
+
 -- Functions
 
 local function damageRandomComponent()
+	local plate = qbx.getVehiclePlate(vehicle)
+	if not plate or plate == '' then return end
 	local dmgFctr = math.random() + math.random(0, 2)
 	local randomComponent = DamageComponents[math.random(1, #DamageComponents)]
 	local randomDamage = (math.random() + math.random(0, 1)) * dmgFctr
-	exports.qbx_mechanicjob:SetVehicleStatus(qbx.getVehiclePlate(vehicle), randomComponent, exports.qbx_mechanicjob:GetVehicleStatus(qbx.getVehiclePlate(vehicle), randomComponent) - randomDamage)
+	VRSFailureAdapter.ApplyRandomComponentDamage(plate, randomComponent, randomDamage)
 end
 
 ---cleans vehicle with animation and progress bar. Consumes a cleaning kit.
 ---@param veh number
 local function cleanVehicle(veh)
+	if not canUseRepairFlow(veh) then return end
 	TaskStartScenarioInPlace(cache.ped, 'WORLD_HUMAN_MAID_CLEAN', 0, true)
 	if lib.progressBar({
 		duration = math.random(10000, 20000),
@@ -102,6 +133,7 @@ end
 ---@param timeLowerBound integer
 ---@param timeUpperBound integer
 local function repairVehicle(veh, engineHealth, itemName, timeLowerBound, timeUpperBound)
+	if not canUseRepairFlow(veh) then return end
 	openVehicleDoors(veh)
 	if lib.progressBar({
 		duration = math.random(timeLowerBound, timeUpperBound),
@@ -128,6 +160,7 @@ local function repairVehicle(veh, engineHealth, itemName, timeLowerBound, timeUp
 		SetVehicleTyreFixed(veh, 2)
 		SetVehicleTyreFixed(veh, 3)
 		SetVehicleTyreFixed(veh, 4)
+		syncMechanicRepairState(veh, engineHealth)
 		closeVehicleDoors(veh)
 		TriggerServerEvent('qb-vehiclefailure:removeItem', itemName)
 	else -- if canceled
@@ -282,6 +315,7 @@ end
 RegisterNetEvent('qb-vehiclefailure:client:RepairVehicle', function()
 	local veh = getVehicleToRepair()
 	if not veh then return end
+	if not canUseRepairFlow(veh) then return end
 
 	local engineHealth = GetVehicleEngineHealth(veh) --This is to prevent people from 'repairing' a vehicle and setting engine health lower than what the vehicles engine health was before repairing.
 	if engineHealth >= 500 then
@@ -295,6 +329,7 @@ end)
 RegisterNetEvent('qb-vehiclefailure:client:RepairVehicleFull', function()
 	local veh = getVehicleToRepair()
 	if not veh then return end
+	if not canUseRepairFlow(veh) then return end
 	repairVehicleFull(veh)
 end)
 
@@ -322,6 +357,7 @@ RegisterNetEvent('iens:repaira', function()
 	WashDecalsFromVehicle(vehicle, 1.0)
 	exports.qbx_core:Notify(locale('success.repaired_veh'))
 	SetVehicleFixed(vehicle)
+	syncMechanicRepairState(vehicle, 1000.0)
 	healthBodyLast = 1000.0
 	healthEngineLast = 1000.0
 	healthPetrolTankLast = 1000.0
@@ -361,6 +397,7 @@ RegisterNetEvent('iens:repair', function()
 	healthEngineLast = cfg.cascadingFailureThreshold + 5
 	healthPetrolTankLast = 750.0
 	SetVehicleEngineOn(vehicle, true, false )
+	syncMechanicRepairState(vehicle, cfg.cascadingFailureThreshold + 5)
 	SetVehicleOilLevel(vehicle, (GetVehicleOilLevel(vehicle) / 3) - 0.5)
 	exports.qbx_core:Notify(locale(('success.fix_message_%s'):format(fixMessagePos)))
 	fixMessagePos += 1
@@ -487,6 +524,11 @@ CreateThread(function()
 		Wait(50)
 		if cache.seat == -1 then
 			vehicle = cache.vehicle
+			if isMechanicDrivenMode() then
+				pedInSameVehicleLast = false
+				lastVehicle = vehicle
+				goto continue
+			end
 			vehicleClass = GetVehicleClass(vehicle)
 			healthEngineCurrent = GetVehicleEngineHealth(vehicle)
 			if healthEngineCurrent == 1000 then healthEngineLast = 1000.0 end
@@ -642,5 +684,6 @@ CreateThread(function()
 			end
 			pedInSameVehicleLast = false
 		end
+		::continue::
 	end
 end)

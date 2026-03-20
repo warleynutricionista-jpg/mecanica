@@ -505,6 +505,8 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
                 if not editorState.valid then
                     lib.notify({ title = 'Elevador', description = editorState.reason or 'Local inválido.', type = 'error' })
                 else
+                    local confirmedGround = select(1, getGroundZ(finalCoords))
+                    finalCoords = vec3(finalCoords.x, finalCoords.y, confirmedGround + editorState.zOffset)
                     local payload = {
                         shopId = editorState.shopId,
                         liftId = editorState.lift and editorState.lift.id or nil,

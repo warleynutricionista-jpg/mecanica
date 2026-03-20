@@ -295,11 +295,6 @@ local function getPlacementValidation(shopId, liftId, coords)
         return false, ('Fora da área permitida da oficina (máx. %.1fm).'):format(distanceLimit)
     end
 
-    local occupied = IsPositionOccupied(coords.x, coords.y, coords.z + 0.8, 1.2, false, false, false, false, true, 0, false)
-    if occupied then
-        return false, 'Local bloqueado por parede/objeto.'
-    end
-
     local shop = Config.Shops[shopId]
     for _, lift in ipairs(shop and shop.lifts or {}) do
         if lift.id ~= liftId then

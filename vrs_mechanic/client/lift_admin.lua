@@ -3,6 +3,7 @@
 -- ============================================================
 
 local editorState = nil
+local adminCommandsRegistered = false
 
 
 function VRS.FetchLiftAdminData()
@@ -16,6 +17,34 @@ function VRS.FetchLiftAdminData()
     end
 
     return response
+end
+
+local function registerLiftAdminCommands()
+    if adminCommandsRegistered then return end
+
+    local configured = Config.Lift.AdminCommands
+    local commands = {}
+
+    if type(configured) == 'table' and #configured > 0 then
+        commands = configured
+    else
+        commands = {
+            Config.Lift.AdminCommand or 'liftadmin',
+            'elevadorcarro',
+        }
+    end
+
+    local seen = {}
+    for _, commandName in ipairs(commands) do
+        if type(commandName) == 'string' and commandName ~= '' and not seen[commandName] then
+            seen[commandName] = true
+            RegisterCommand(commandName, function()
+                VRS.OpenLiftAdminMenu()
+            end, false)
+        end
+    end
+
+    adminCommandsRegistered = true
 end
 
 local function round3(value)
@@ -278,11 +307,15 @@ local function saveLiftLayout(payload)
     if not result or not result.success then
         local messages = {
             no_access = 'Sem permissão para gerenciar elevadores.',
+            no_permission = 'Sem permissão para gerenciar elevadores.',
             not_on_duty = 'Você precisa estar em serviço para gerenciar elevadores.',
             shop_busy = 'Existe um elevador em uso/movimento nesta oficina.',
             invalid_lift = 'Elevador inválido.',
             invalid_payload = 'Dados inválidos para salvar.',
             admin_unavailable = 'Gerenciamento de elevadores indisponível no servidor.',
+            cooldown = 'Aguarde um instante antes de tentar novamente.',
+            outside_shop = 'A nova posição está fora da área permitida da oficina.',
+            lift_overlap = 'A nova posição está muito próxima de outro elevador.',
         }
         lib.notify({ title = 'Elevador', description = messages[result and result.reason or ''] or 'Falha ao salvar elevador.', type = 'error' })
         return false
@@ -301,10 +334,12 @@ local function deleteLiftLayout(shopId, liftId)
     if not result or not result.success then
         local messages = {
             no_access = 'Sem permissão para remover elevadores.',
+            no_permission = 'Sem permissão para remover elevadores.',
             not_on_duty = 'Você precisa estar em serviço para gerenciar elevadores.',
             shop_busy = 'Existe um elevador em uso/movimento nesta oficina.',
             invalid_lift = 'Elevador inválido.',
             admin_unavailable = 'Gerenciamento de elevadores indisponível no servidor.',
+            cooldown = 'Aguarde um instante antes de tentar novamente.',
         }
         lib.notify({ title = 'Elevador', description = messages[result and result.reason or ''] or 'Falha ao remover elevador.', type = 'error' })
         return false
@@ -582,7 +617,7 @@ function VRS.OpenLiftAdminMenu(shopId, liftId)
         VRS.ApplyLiftLayouts(layouts)
     end
 
-    if not shops or #shops == 0 then
+    if response.allowed == false or not shops or #shops == 0 then
         lib.notify({ title = 'Elevador', description = 'Sem permissão para gerenciar elevadores.', type = 'error' })
         return
     end
@@ -734,9 +769,7 @@ local function debugNearestLift()
     lib.notify({ title = 'Lift Debug', description = ('Modelo %s detectado. Snippet enviado para clipboard/console.'):format(lift.model), type = 'inform' })
 end
 
-RegisterCommand(Config.Lift.AdminCommand or 'liftadmin', function()
-    VRS.OpenLiftAdminMenu()
-end, false)
+registerLiftAdminCommands()
 
 RegisterCommand(Config.Lift.DebugCommand or 'liftdebug', function()
     debugNearestLift()

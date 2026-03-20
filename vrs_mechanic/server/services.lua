@@ -66,7 +66,21 @@ lib.callback.register('vrs_mechanic:server:beginVehicleService', function(source
         serviceType = serviceType,
         serviceKey = serviceKey,
         startedAt = os.time(),
+        plate = data and data.plate or nil,
+        netId = data and data.netId or nil,
     }
+
+    if data and data.netId then
+        local vehicle = NetworkGetEntityFromNetworkId(data.netId)
+        if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+            Entity(vehicle).state:set('vrs:service', VRS.ActiveServices[lockKey], true)
+        end
+    end
+
+    local playerState = Player(source).state
+    local activeServices = playerState.vrsActiveServices or {}
+    activeServices[lockKey] = VRS.ActiveServices[lockKey]
+    playerState:set('vrsActiveServices', activeServices, true)
 
     return { success = true, lockKey = lockKey }
 end)
@@ -74,6 +88,18 @@ end)
 lib.callback.register('vrs_mechanic:server:endVehicleService', function(source, lockKey)
     local active = lockKey and VRS.ActiveServices[lockKey]
     if active and active.source == source then
+        if active.netId then
+            local vehicle = NetworkGetEntityFromNetworkId(active.netId)
+            if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+                Entity(vehicle).state:set('vrs:service', nil, true)
+            end
+        end
+
+        local playerState = Player(source).state
+        local activeServices = playerState.vrsActiveServices or {}
+        activeServices[lockKey] = nil
+        playerState:set('vrsActiveServices', activeServices, true)
+
         VRS.ActiveServices[lockKey] = nil
     end
 
@@ -84,7 +110,18 @@ AddEventHandler('playerDropped', function()
     local src = source
     for lockKey, active in pairs(VRS.ActiveServices) do
         if active and active.source == src then
+            if active.netId then
+                local vehicle = NetworkGetEntityFromNetworkId(active.netId)
+                if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+                    Entity(vehicle).state:set('vrs:service', nil, true)
+                end
+            end
             VRS.ActiveServices[lockKey] = nil
         end
+    end
+
+    local player = Player(src)
+    if player then
+        player.state:set('vrsActiveServices', {}, true)
     end
 end)

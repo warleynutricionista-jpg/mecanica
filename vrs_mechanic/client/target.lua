@@ -38,6 +38,16 @@ local function canUseLiftPanel(shopId)
     return VRS.CanUseLift(shopId)
 end
 
+local function getLiftVehicle(shopId, liftIndex)
+    local state = VRS.GetLiftStateSnapshot and VRS.GetLiftStateSnapshot(shopId, liftIndex) or nil
+    local netId = state and state.vehicleNetId or nil
+    if not netId then
+        return nil
+    end
+
+    return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
+end
+
 local function removeLiftTargets()
     for key, zoneId in pairs(liftTargets) do
         exports.ox_target:removeZone(zoneId)
@@ -66,54 +76,43 @@ local function createLiftTargets(shopId, shop)
                     icon = 'fas fa-car-side',
                     label = 'Serviços do elevador',
                     distance = 3.0,
+                    canInteract = function()
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                    end,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
                     end,
                 },
                 {
-                    name = liftId .. '_admin',
-                    icon = 'fas fa-screwdriver-wrench',
-                    label = 'Gerenciar elevador',
-                    distance = 3.0,
-                    onSelect = function()
-                        VRS.OpenLiftAdminMenu(shopId, lift.id)
-                    end,
-                },
-            },
-        })
-
-        local panelCoords = getLiftPanelCoords(lift)
-        local panelId = ('vrs_lift_panel_%s_%d'):format(shopId, i)
-        panelTargets[panelId] = exports.ox_target:addBoxZone({
-            coords = vec3(panelCoords.x, panelCoords.y, panelCoords.z),
-            size = Config.Lift.controlPanelSize or vec3(0.6, 0.6, 1.8),
-            rotation = panelCoords.w or 0.0,
-            debug = false,
-            options = {
-                {
-                    name = panelId .. '_open',
+                    name = liftId .. '_panel',
                     icon = 'fas fa-sliders',
                     label = 'Painel do Elevador',
-                    distance = Config.Lift.controlPanelDistance or 2.5,
-                    groups = shop.job and { [shop.job] = 0 } or nil,
+                    distance = 3.0,
                     canInteract = function()
-                        return canUseLiftPanel(shopId)
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
                     end,
                     onSelect = function()
                         VRS.OpenLiftPanel(shopId, i)
                     end,
                 },
                 {
-                    name = panelId .. '_admin',
-                    icon = 'fas fa-pen-ruler',
-                    label = 'Reposicionar elevador',
-                    distance = Config.Lift.controlPanelDistance or 2.5,
+                    name = liftId .. '_repair',
+                    icon = 'fas fa-wrench',
+                    label = 'Reparo de Oficina',
+                    distance = 3.0,
+                    canInteract = function()
+                        return canUseLiftPanel(shopId) and getLiftVehicle(shopId, i) ~= nil
+                    end,
                     onSelect = function()
-                        VRS.OpenLiftAdminMenu(shopId, lift.id)
+                        local vehicle = getLiftVehicle(shopId, i)
+                        if vehicle then
+                            VRS.OpenShopRepairMenu(vehicle, shopId)
+                        end
                     end,
                 },
             },
         })
+
     end
 end
 
@@ -226,6 +225,10 @@ local function createVehicleTargets()
             label = 'Verificar veículo',
             distance = 3.0,
             bones = { 'bonnet' },
+            canInteract = function(entity)
+                local onLift = entity and VRS.IsVehicleOnLift and select(1, VRS.IsVehicleOnLift(entity)) or false
+                return not onLift
+            end,
             onSelect = function(data)
                 local vehicle = data.entity
                 if not vehicle or not DoesEntityExist(vehicle) then return end
@@ -238,6 +241,10 @@ local function createVehicleTargets()
             label = VRS.L.repair.street_repair,
             distance = 3.0,
             bones = { 'bonnet' },
+            canInteract = function(entity)
+                local onLift = entity and VRS.IsVehicleOnLift and select(1, VRS.IsVehicleOnLift(entity)) or false
+                return not onLift
+            end,
             onSelect = function(data)
                 local vehicle = data.entity
                 if not vehicle or not DoesEntityExist(vehicle) then return end

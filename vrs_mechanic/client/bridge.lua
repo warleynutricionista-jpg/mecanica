@@ -17,7 +17,7 @@ local function getServiceState(vehicle, plate)
         return serviceState
     end
 
-    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    local netId = VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
     local activeServices = LocalPlayer.state.vrsActiveServices or {}
 
     if plate and activeServices['plate:' .. plate] then
@@ -42,6 +42,7 @@ function VRS.GetIntegratedVehicleState(vehicle)
     end
 
     local plate = VRS.GetPlate(vehicle)
+    local netId = VRS.GetSafeNetId and select(1, VRS.GetSafeNetId(vehicle)) or nil
     local status = plate and VRS.GetLocalStatus(plate) or nil
     local liftState, liftKey = VRS.GetLiftStateForVehicle(vehicle)
     local entityLiftState = Entity(vehicle).state and Entity(vehicle).state['vrs:onLift'] or nil
@@ -63,7 +64,7 @@ function VRS.GetIntegratedVehicleState(vehicle)
     return {
         exists = true,
         plate = plate,
-        netId = NetworkGetNetworkIdFromEntity(vehicle),
+        netId = netId,
         status = status,
         service = serviceState,
         inService = inService,

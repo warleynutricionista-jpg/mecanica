@@ -29,6 +29,25 @@ local function getLiftMetrics(shopId, liftIndex)
     return VRS.GetLiftMetrics(getLiftEntry(shopId, liftIndex) or {})
 end
 
+local function getVehicleEntityFromNetId(netId)
+    return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
+end
+
+local function isVehicleWithinLiftBounds(shopId, liftIndex, vehicle)
+    local lift = getLiftEntry(shopId, liftIndex)
+    if not lift or not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return false, 'invalid_vehicle', {}
+    end
+
+    return VRS.EvaluateLiftVehiclePlacement(
+        lift.coords,
+        getLiftMetrics(shopId, liftIndex),
+        GetEntityCoords(vehicle),
+        GetEntityHeading(vehicle),
+        nil
+    )
+end
+
 local function clampHeight(height, shopId, liftIndex)
     local numericHeight = tonumber(height)
     if not numericHeight then return nil end
@@ -122,8 +141,8 @@ local function buildLiftState(shopId, liftIndex)
 
     -- Validar que o veículo ainda existe
     if state.vehicleNetId and state.vehicleNetId ~= 0 then
-        local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
-        if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        local vehicle = getVehicleEntityFromNetId(state.vehicleNetId)
+        if not vehicle then
             state.vehicleNetId = nil
             state.plate = nil
             state.height = state.minHeight
@@ -194,7 +213,7 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
         return { success = false, reason = reason }
     end
 
-    local validVehicle, _, vehicleReason = VRS.ValidateVehicleContext(src, plate, netId, Config.Lift.maxDistance or 12.0)
+    local validVehicle, vehicle, vehicleReason = VRS.ValidateVehicleContext(src, plate, netId, Config.Lift.maxDistance or 12.0)
     if not validVehicle then
         return { success = false, reason = vehicleReason or 'invalid_vehicle' }
     end
@@ -211,6 +230,26 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
         return { success = false, reason = 'lift_occupied' }
     end
 
+    local existingLiftKey, existingLiftState = VRS.FindLiftByVehicle(plate, netId)
+    if existingLiftKey and existingLiftKey ~= key then
+        return {
+            success = false,
+            reason = existingLiftState and existingLiftState.vehicleNetId and 'vehicle_already_on_other_lift' or 'lift_occupied'
+        }
+    end
+
+    local placementOk, placementReason, placement = isVehicleWithinLiftBounds(shopId, liftIndex, vehicle)
+    if not placementOk then
+        VRS.LiftDebugLog('attach', ('Vínculo negado para %s: reason=%s fwd=%.2f lat=%.2f heading=%.2f'):format(
+            key,
+            tostring(placementReason),
+            placement and placement.forwardOffset or -1.0,
+            placement and placement.lateralOffset or -1.0,
+            placement and placement.headingDelta or -1.0
+        ))
+        return { success = false, reason = placementReason or 'misaligned_vehicle' }
+    end
+
     state.vehicleNetId = netId
     state.plate = plate
     state.height = metrics.minHeight
@@ -221,8 +260,7 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
     clearLiftOperationState(state)
     VRS.LiftStates[key] = state
 
-    local vehicle = NetworkGetEntityFromNetworkId(netId)
-    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+    if vehicle then
         Entity(vehicle).state:set('vrs:onLift', { shopId = shopId, liftIndex = liftIndex, plate = plate }, true)
     end
 
@@ -254,8 +292,8 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
         return { success = false, reason = 'lift_not_lowered' }
     end
 
-    local vehicle = NetworkGetEntityFromNetworkId(state.vehicleNetId)
-    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+    local vehicle = getVehicleEntityFromNetId(state.vehicleNetId)
+    if vehicle then
         Entity(vehicle).state:set('vrs:onLift', nil, true)
     end
 

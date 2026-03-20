@@ -181,6 +181,40 @@ Config.DebugModules = Config.DebugModules or {
     clientLoops = false,
     liftAuthority = false,
     rotatedZones = false,
+    liftAdmin = false,
+    liftMenu = false,
+    liftPermissions = false,
+}
+
+
+-- ============================================================
+-- INTEGRAÇÃO COM RECURSOS DE VEÍCULOS
+-- ============================================================
+Config.EnableVrsMechanicIntegration = Config.EnableVrsMechanicIntegration ~= false
+Config.VehicleIntegration = Config.VehicleIntegration or {
+    VrsMechanicAsPrimaryMechanicalSource = true,
+    BlockPushWhenOnLift = true,
+    BlockPushDuringService = true,
+    BlockPushWhenDisabledByMechanic = true,
+    BlockLockpickDuringService = true,
+    BlockLockpickWhenOnLift = true,
+    RespectMechanicIgnitionState = true,
+    RespectMechanicGarageRestrictions = true,
+    RespectMechanicRadioState = true,
+    AllowRadioOnLift = true,
+    AllowRadioDuringService = false,
+    AllowRadioWithoutEngine = true,
+    CriticalEngineThreshold = 150.0,
+    CriticalBatteryThreshold = 5.0,
+    DebugVehicleIntegration = false,
+    DebugModules = {
+        lockpick = false,
+        failure = false,
+        push = false,
+        radio = false,
+        vehicles = false,
+        bridge = false,
+    }
 }
 
 
@@ -223,4 +257,5 @@ Config.Cooldowns = {
     billing = 10000,
     upgrade = 10000,
     partsShop = 1500,
+    liftAdmin = 1500,
 }

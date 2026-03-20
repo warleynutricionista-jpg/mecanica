@@ -147,6 +147,68 @@ function VRS.GetItemLabel(itemName)
     return itemName
 end
 
+--- Monta uma chave estável para elevadores
+---@param shopId string|nil
+---@param liftIndex string|number|nil
+---@return string|nil
+function VRS.GetLiftKey(shopId, liftIndex)
+    if not shopId or shopId == '' or liftIndex == nil then
+        return nil
+    end
+
+    return ('%s_%s'):format(tostring(shopId), tostring(liftIndex))
+end
+
+--- Resolve uma referência de elevador com fallback seguro
+---@param shopId string|nil
+---@param liftIndex number|string|nil
+---@return table|nil, string|nil
+function VRS.ResolveLiftReference(shopId, liftIndex)
+    if not shopId or shopId == '' then
+        return nil, 'invalid_shop'
+    end
+
+    local shop = Config.Shops and Config.Shops[shopId] or nil
+    if not shop then
+        return nil, 'invalid_shop'
+    end
+
+    local numericIndex = tonumber(liftIndex)
+    if not numericIndex then
+        return nil, 'invalid_lift'
+    end
+
+    local lift = shop.lifts and shop.lifts[numericIndex] or nil
+    if not lift then
+        return nil, 'invalid_lift'
+    end
+
+    local liftKey = VRS.GetLiftKey(shopId, numericIndex)
+    if not liftKey then
+        return nil, 'invalid_lift'
+    end
+
+    return {
+        shop = shop,
+        shopId = shopId,
+        lift = lift,
+        liftIndex = numericIndex,
+        liftKey = liftKey,
+    }, nil
+end
+
+--- Log padronizado para o subsistema de elevadores
+---@param category string
+---@param message string
+function VRS.LiftDebugLog(category, message)
+    local enabled = Config.Lift and Config.Lift.Debug == true
+    if not enabled and not VRS.IsDebugEnabled(category) then
+        return
+    end
+
+    print(('[vrs_mechanic][lift][%s] %s'):format(category or 'general', message or ''))
+end
+
 
 
 --- Faz deep copy simples de tabelas

@@ -21,6 +21,31 @@ local function getLiftKey(shopId, liftIndex)
     return ('%s_%s'):format(shopId, liftIndex)
 end
 
+local function getLiftManagementConfig()
+    local configured = Config.Lift.Management or {}
+    local commandList = type(Config.Lift.AdminCommands) == 'table' and Config.Lift.AdminCommands or nil
+
+    return {
+        requireDuty = configured.requireDuty ~= nil and configured.requireDuty or Config.Lift.AdminRequireDuty,
+        allowAdminAce = configured.allowAdminAce ~= false,
+        ace = configured.ace or Config.Lift.AdminAce,
+        allowShopManagers = configured.allowShopManagers ~= false,
+        allowBoss = configured.allowBoss ~= false,
+        allowAuthorizedMechanics = configured.allowAuthorizedMechanics ~= false,
+        defaultMinGrade = tonumber(configured.defaultMinGrade) or 0,
+        jobs = type(configured.jobs) == 'table' and configured.jobs or {},
+        debug = configured.debug == true or Config.Lift.Debug == true,
+        commands = commandList or { Config.Lift.AdminCommand or 'liftadmin', 'elevadorcarro' },
+    }
+end
+
+local function liftAdminLog(category, message)
+    local management = getLiftManagementConfig()
+    if not management.debug then return end
+
+    print(('[vrs_mechanic][lift_admin][%s] %s'):format(category or 'general', message or ''))
+end
+
 local function ensureLayoutStore()
     savedLayouts.version = savedLayouts.version or 1
     savedLayouts.lastId = tonumber(savedLayouts.lastId) or 0
@@ -76,6 +101,124 @@ local function getLiftById(shopId, liftId)
     end
 
     return nil, nil
+end
+
+local function getPlayerJobData(source)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return nil end
+    return player.PlayerData and player.PlayerData.job or nil
+end
+
+local function normalizeGradeLevel(job)
+    if not job or not job.grade then return 0 end
+    return tonumber(job.grade.level or job.grade) or 0
+end
+
+local function hasConfiguredJobPermission(source, shopId)
+    local management = getLiftManagementConfig()
+    local job = getPlayerJobData(source)
+    local shop = Config.Shops[shopId]
+
+    if not job or not shop then
+        return false, 'no_player'
+    end
+
+    local jobRule = management.jobs[job.name]
+    if jobRule == false then
+        return false, 'no_permission'
+    end
+
+    if shop.job and job.name ~= shop.job and not (jobRule and jobRule.allowOtherShops == true) then
+        return false, 'no_access'
+    end
+
+    if management.requireDuty and job.onduty ~= true then
+        return false, 'not_on_duty'
+    end
+
+    local minGrade = management.defaultMinGrade
+    local bossOnly = false
+    local allowedGrades = nil
+
+    if type(jobRule) == 'table' then
+        if jobRule.enabled == false then
+            return false, 'no_permission'
+        end
+
+        if tonumber(jobRule.minGrade) then
+            minGrade = tonumber(jobRule.minGrade)
+        end
+
+        bossOnly = jobRule.bossOnly == true
+        allowedGrades = type(jobRule.allowedGrades) == 'table' and jobRule.allowedGrades or nil
+    elseif jobRule == true then
+        minGrade = 0
+    elseif jobRule == nil then
+        minGrade = management.defaultMinGrade
+    end
+
+    if bossOnly and not (VRS.IsBoss and VRS.IsBoss(source, shopId)) then
+        return false, 'no_permission'
+    end
+
+    local gradeLevel = normalizeGradeLevel(job)
+    if allowedGrades and next(allowedGrades) then
+        local matched = false
+        for _, grade in ipairs(allowedGrades) do
+            if gradeLevel == tonumber(grade) then
+                matched = true
+                break
+            end
+        end
+
+        if not matched then
+            return false, 'no_permission'
+        end
+    elseif gradeLevel < minGrade then
+        return false, 'no_permission'
+    end
+
+    return true, 'mechanic'
+end
+
+local function validateSerializedCoords(coords)
+    if type(coords) ~= 'table' then
+        return false
+    end
+
+    return tonumber(coords.x) ~= nil
+        and tonumber(coords.y) ~= nil
+        and tonumber(coords.z) ~= nil
+end
+
+local function validateLiftPlacementData(shopId, liftId, coords)
+    local shop = Config.Shops[shopId]
+    if not shop or not shop.zones or not shop.zones.main then
+        return false, 'invalid_shop'
+    end
+
+    if not validateSerializedCoords(coords) then
+        return false, 'invalid_payload'
+    end
+
+    local zoneCenter = shop.zones.main.coords
+    local distanceLimit = tonumber(Config.Lift.ValidationDistanceFromShop) or 35.0
+    local placement = vec3(coords.x + 0.0, coords.y + 0.0, coords.z + 0.0)
+    if #(placement - zoneCenter) > distanceLimit then
+        return false, 'outside_shop'
+    end
+
+    local minSpacing = tonumber(Config.Lift.MinSpacing) or 4.0
+    for _, lift in ipairs(shop.lifts or {}) do
+        if lift.id ~= liftId then
+            local dist = #(placement - vec3(lift.coords.x, lift.coords.y, lift.coords.z))
+            if dist < minSpacing then
+                return false, 'lift_overlap'
+            end
+        end
+    end
+
+    return true, nil
 end
 
 local function getWorldLiftId(shopId, model, coords)
@@ -329,21 +472,25 @@ function VRS.CanManageLifts(source, shopId)
         return false, 'no_player'
     end
 
-    local ace = Config.Lift.AdminAce
-    if ace and ace ~= '' and IsPlayerAceAllowed(source, ace) then
+    local management = getLiftManagementConfig()
+    local ace = management.ace
+    if management.allowAdminAce and ace and ace ~= '' and IsPlayerAceAllowed(source, ace) then
+        liftAdminLog('permissions', ('Acesso liberado via ACE para source=%s shop=%s'):format(source, tostring(shopId)))
         return true, 'admin'
     end
 
     if not shopId then
         for id, shop in pairs(Config.Shops) do
-            if shop.type == 'owned' and VRS.IsManager(source, id) then
-                if not Config.Lift.AdminRequireDuty or VRS.IsOnDuty(source) then
-                    return true, 'manager'
+            if shop.type == 'owned' then
+                local allowed, origin = VRS.CanManageLifts(source, id)
+                if allowed then
+                    return true, origin
                 end
             end
         end
 
-        return false, Config.Lift.AdminRequireDuty and 'not_on_duty' or 'no_permission'
+        liftAdminLog('permissions', ('Acesso global negado para source=%s'):format(source))
+        return false, management.requireDuty and 'not_on_duty' or 'no_permission'
     end
 
     local shop = Config.Shops[shopId]
@@ -355,19 +502,29 @@ function VRS.CanManageLifts(source, shopId)
         return false, 'no_permission'
     end
 
-    if not VRS.HasShopAccess(source, shopId) then
-        return false, 'no_access'
+    local mechanicReason = nil
+    if management.allowAuthorizedMechanics then
+        local mechanicAllowed, mechanicOrigin = hasConfiguredJobPermission(source, shopId)
+        if mechanicAllowed then
+            liftAdminLog('permissions', ('Acesso liberado via mecânico autorizado para source=%s shop=%s'):format(source, shopId))
+            return true, mechanicOrigin
+        end
+        mechanicReason = mechanicOrigin
     end
 
-    if Config.Lift.AdminRequireDuty and not VRS.IsOnDuty(source) then
-        return false, 'not_on_duty'
+    if management.allowShopManagers and VRS.HasShopAccess(source, shopId) then
+        if management.requireDuty and not VRS.IsOnDuty(source) then
+            return false, 'not_on_duty'
+        end
+
+        if VRS.IsManager(source, shopId) or (management.allowBoss and VRS.IsBoss and VRS.IsBoss(source, shopId)) then
+            liftAdminLog('permissions', ('Acesso liberado via gerente/boss para source=%s shop=%s'):format(source, shopId))
+            return true, 'manager'
+        end
     end
 
-    if not VRS.IsManager(source, shopId) and not (VRS.IsBoss and VRS.IsBoss(source, shopId)) then
-        return false, 'no_permission'
-    end
-
-    return true, 'manager'
+    liftAdminLog('permissions', ('Acesso negado para source=%s shop=%s'):format(source, shopId))
+    return false, mechanicReason or 'no_permission'
 end
 
 function VRS.GetManageableLiftShops(source)
@@ -400,7 +557,12 @@ end
 local function validateMutation(source, shopId, liftId)
     local allowed, reason = VRS.CanManageLifts(source, shopId)
     if not allowed then
+        liftAdminLog('mutation', ('Mutação negada para source=%s shop=%s lift=%s reason=%s'):format(source, tostring(shopId), tostring(liftId), tostring(reason)))
         return false, reason
+    end
+
+    if not VRS.CheckCooldown(source, 'liftAdmin') then
+        return false, 'cooldown'
     end
 
     if shopHasBusyLift(shopId) then
@@ -418,8 +580,11 @@ local function validateMutation(source, shopId, liftId)
 end
 
 lib.callback.register('vrs_mechanic:server:getLiftLayouts', function(source)
+    local allowed, reason = VRS.CanManageLifts(source)
+    liftAdminLog('fetch', ('Layout solicitado por source=%s allowed=%s reason=%s'):format(source, tostring(allowed), tostring(reason)))
     return {
-        allowed = VRS.CanManageLifts(source),
+        allowed = allowed,
+        allowedReason = reason,
         shops = VRS.GetManageableLiftShops(source),
         layouts = VRS.GetLiftLayoutsForSync(),
     }
@@ -442,9 +607,16 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
         return { success = false, reason = reason }
     end
 
+    local placementOk, placementReason = validateLiftPlacementData(shopId, payload.liftId, coords)
+    if not placementOk then
+        liftAdminLog('save', ('Validação de posição falhou para source=%s shop=%s lift=%s reason=%s'):format(source, shopId, tostring(payload.liftId), tostring(placementReason)))
+        return { success = false, reason = placementReason }
+    end
+
     local shop = Config.Shops[shopId]
     local heading = tonumber(payload.heading or coords.w) or 0.0
     local serializedCoords = getSerializedCoords(coords, heading)
+    liftAdminLog('save', ('Persistindo elevador. source=%s shop=%s lift=%s edit=%s'):format(source, shopId, tostring(payload.liftId), tostring(isEdit)))
 
     if isEdit then
         local existing = getLiftById(shopId, payload.liftId)
@@ -550,6 +722,7 @@ lib.callback.register('vrs_mechanic:server:deleteLiftLayout', function(source, s
     rebuildLiftLayouts()
     clearShopLiftStates(shopId)
     syncLayouts()
+    liftAdminLog('delete', ('Elevador removido. source=%s shop=%s lift=%s'):format(source, shopId, liftId))
 
     return {
         success = true,

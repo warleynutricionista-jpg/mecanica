@@ -906,6 +906,8 @@ CreateThread(function()
             VRS.ScanWorldLifts(shopId)
         end
     end
+
+    TriggerServerEvent('vrs_mechanic:server:requestLiftLayouts')
 end)
 
 -- ============================================================

@@ -457,3 +457,5 @@ CreateThread(function()
     loadLiftLayouts()
     rebuildLiftLayouts()
 end)
+
+VRS.LiftAdminAvailable = true

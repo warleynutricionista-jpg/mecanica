@@ -55,6 +55,19 @@ local function requestControl(entity)
     return NetworkHasControlOfEntity(entity)
 end
 
+local function fetchLiftLayoutsSafe()
+    local ok, response = pcall(function()
+        return lib.callback.await('vrs_mechanic:server:getLiftLayouts', false)
+    end)
+
+    if not ok then
+        print(('[vrs_mechanic] Lift admin callback indisponível no client: %s'):format(response))
+        return nil
+    end
+
+    return response
+end
+
 -- ============================================================
 -- SPAWN DE PROPS DO ELEVADOR
 -- ============================================================
@@ -682,7 +695,7 @@ end)
 CreateThread(function()
     Wait(1500)
 
-    local response = lib.callback.await('vrs_mechanic:server:getLiftLayouts', false)
+    local response = fetchLiftLayoutsSafe()
     if response and response.layouts then
         VRS.ApplyLiftLayouts(response.layouts)
     else

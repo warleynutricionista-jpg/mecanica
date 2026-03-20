@@ -4,6 +4,20 @@
 
 local editorState = nil
 
+
+function VRS.FetchLiftAdminData()
+    local ok, response = pcall(function()
+        return lib.callback.await('vrs_mechanic:server:getLiftLayouts', false)
+    end)
+
+    if not ok then
+        print(('[vrs_mechanic] Lift admin callback indisponível: %s'):format(response))
+        return nil
+    end
+
+    return response
+end
+
 local function round3(value)
     return tonumber(('%0.3f'):format(value or 0.0)) or 0.0
 end
@@ -246,6 +260,7 @@ local function saveLiftLayout(payload)
             shop_busy = 'Existe um elevador em uso/movimento nesta oficina.',
             invalid_lift = 'Elevador inválido.',
             invalid_payload = 'Dados inválidos para salvar.',
+            admin_unavailable = 'Gerenciamento de elevadores indisponível no servidor.',
         }
         lib.notify({ title = 'Elevador', description = messages[result and result.reason or ''] or 'Falha ao salvar elevador.', type = 'error' })
         return false
@@ -267,6 +282,7 @@ local function deleteLiftLayout(shopId, liftId)
             not_on_duty = 'Você precisa estar em serviço para gerenciar elevadores.',
             shop_busy = 'Existe um elevador em uso/movimento nesta oficina.',
             invalid_lift = 'Elevador inválido.',
+            admin_unavailable = 'Gerenciamento de elevadores indisponível no servidor.',
         }
         lib.notify({ title = 'Elevador', description = messages[result and result.reason or ''] or 'Falha ao remover elevador.', type = 'error' })
         return false
@@ -494,9 +510,14 @@ local function openShopAdminMenu(shopId)
 end
 
 function VRS.OpenLiftAdminMenu(shopId, liftId)
-    local response = lib.callback.await('vrs_mechanic:server:getLiftLayouts', false)
-    local shops = response and response.shops or {}
-    local layouts = response and response.layouts or nil
+    local response = VRS.FetchLiftAdminData()
+    if not response then
+        lib.notify({ title = 'Elevador', description = 'Gerenciamento de elevadores indisponível no servidor.', type = 'error' })
+        return
+    end
+
+    local shops = response.shops or {}
+    local layouts = response.layouts or nil
 
     if layouts then
         VRS.ApplyLiftLayouts(layouts)

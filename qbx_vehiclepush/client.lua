@@ -16,13 +16,17 @@ local function isVrsMechanicActive()
 end
 
 local function notifyPushRestriction(reason)
-    local messages = {
+    local fallback = {
         service_active = 'Este veículo está em serviço mecânico e não pode ser empurrado.',
         vehicle_on_lift = 'Este veículo está no elevador e não pode ser empurrado.',
         mechanically_disabled = 'O estado mecânico atual bloqueia o empurrão.',
     }
 
-    exports.qbx_core:Notify(messages[reason] or 'A integração mecânica bloqueou o empurrão.', 'error')
+    local ok, message = pcall(function()
+        return exports.vrs_mechanic:GetIntegrationReasonMessage('push', reason)
+    end)
+
+    exports.qbx_core:Notify(ok and message or fallback[reason] or 'A integração mecânica bloqueou o empurrão.', 'error')
 end
 
 local function canPushWithMechanic(vehicle, notify)

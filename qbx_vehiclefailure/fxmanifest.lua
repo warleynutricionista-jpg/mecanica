@@ -15,6 +15,7 @@ shared_scripts {
 
 client_scripts {
     '@qbx_core/modules/playerdata.lua',
+    'client/vrs_adapter.lua',
     'client/main.lua',
 }
 

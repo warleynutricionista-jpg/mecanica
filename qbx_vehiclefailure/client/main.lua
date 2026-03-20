@@ -35,72 +35,31 @@ local DamageComponents = {
 }
 
 local function isVrsMechanicActive()
-    return Config.EnableVrsMechanicIntegration ~= false and GetResourceState('vrs_mechanic') == 'started'
+    return VRSFailureAdapter.IsActive()
 end
 
 local function getVrsIntegrationMode()
-    return Config.VrsIntegrationMode or 'mechanic-driven'
+    return VRSFailureAdapter.GetIntegrationMode()
 end
 
 local function isMechanicDrivenMode()
-    return isVrsMechanicActive() and getVrsIntegrationMode() == 'mechanic-driven'
+    return VRSFailureAdapter.IsMechanicDrivenMode()
 end
 
 local function getMechanicBridgeState(veh)
-    if not isVrsMechanicActive() or not veh or veh == 0 or not DoesEntityExist(veh) then return nil end
-
-    local ok, state = pcall(function()
-        return exports.vrs_mechanic:GetIntegratedVehicleState(veh)
-    end)
-
-    return ok and state or nil
+    return VRSFailureAdapter.GetMechanicBridgeState(veh)
 end
 
 local function notifyMechanicRestriction(reason)
-    local messages = {
-        service_active = 'Este veículo está em serviço mecânico ativo.',
-        vehicle_on_lift = 'Este veículo está no elevador e não pode ser manipulado agora.',
-        mechanically_disabled = 'O estado mecânico atual impede esta ação.',
-    }
-
-    exports.qbx_core:Notify(messages[reason] or 'A integração mecânica bloqueou esta ação no momento.', 'error')
+    VRSFailureAdapter.NotifyMechanicRestriction(reason)
 end
 
 local function canUseRepairFlow(veh)
-    if not isVrsMechanicActive() or Config.BlockRepairKitDuringMechanicService == false then
-        return true
-    end
-
-    local state = getMechanicBridgeState(veh)
-    if not state then return true end
-
-    if state.inService then
-        notifyMechanicRestriction('service_active')
-        return false
-    end
-
-    if state.onLift then
-        notifyMechanicRestriction('vehicle_on_lift')
-        return false
-    end
-
-    return true
+    return VRSFailureAdapter.CanUseRepairFlow(veh)
 end
 
 local function syncMechanicRepairState(veh, engineHealth)
-    if not veh or veh == 0 or not DoesEntityExist(veh) then return end
-
-    local plate = qbx.getVehiclePlate(veh)
-    if not plate or plate == '' then return end
-
-    local bodyHealth = GetVehicleBodyHealth(veh)
-    local batteryHealth = engineHealth >= 1000 and 100.0 or 50.0
-
-    pcall(function()
-        exports.qbx_mechanicjob:SetVehicleStatus(plate, 'engine', engineHealth)
-        exports.qbx_mechanicjob:SetVehicleStatus(plate, 'body', bodyHealth)
-        exports.qbx_mechanicjob:SetVehicleStatus(plate, 'battery', batteryHealth)
-    end)
+    VRSFailureAdapter.SyncMechanicRepairState(veh, engineHealth)
 end
 
 -- Functions
@@ -111,10 +70,7 @@ local function damageRandomComponent()
 	local dmgFctr = math.random() + math.random(0, 2)
 	local randomComponent = DamageComponents[math.random(1, #DamageComponents)]
 	local randomDamage = (math.random() + math.random(0, 1)) * dmgFctr
-	pcall(function()
-		local currentValue = exports.qbx_mechanicjob:GetVehicleStatus(plate, randomComponent) or 0
-		exports.qbx_mechanicjob:SetVehicleStatus(plate, randomComponent, currentValue - randomDamage)
-	end)
+	VRSFailureAdapter.ApplyRandomComponentDamage(plate, randomComponent, randomDamage)
 end
 
 ---cleans vehicle with animation and progress bar. Consumes a cleaning kit.

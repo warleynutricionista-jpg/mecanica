@@ -147,3 +147,7 @@ exports('IsVehicleOnLift', VRS.IsVehicleOnLiftServer)
 exports('CanPushVehicle', VRS.CanPushVehicleServer)
 exports('CanStoreVehicle', VRS.CanStoreVehicleServer)
 exports('GetVehiclePersistenceData', VRS.GetVehiclePersistenceData)
+
+exports('GetIntegrationReasonMessage', function(action, reason)
+    return VRS.GetIntegrationReasonMessage(reason, action)
+end)

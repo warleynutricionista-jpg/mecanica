@@ -16,52 +16,20 @@ local triggerEventHooks = require '@qbx_core.modules.hooks'
 
 
 local function isVrsMechanicActive()
-    return GetResourceState('vrs_mechanic') == 'started'
+    return QbxVehiclesVrsHooks.IsActive()
 end
 
 local function attachVrsMechanicPersistence(props)
-    if not isVrsMechanicActive() or type(props) ~= 'table' or not props.plate then
-        return props
-    end
-
-    local ok, persistence = pcall(function()
-        return exports.vrs_mechanic:GetVehiclePersistenceData(props.plate)
-    end)
-
-    if ok and persistence then
-        props.vrsMechanic = persistence
-    end
-
-    return props
+    return QbxVehiclesVrsHooks.AttachPersistence(props)
 end
 
 local function seedVrsMechanicPersistence(props)
-    if not isVrsMechanicActive() or type(props) ~= 'table' or not props.plate then
-        return
-    end
-
-    local persisted = props.vrsMechanic
-    if not persisted or type(persisted.status) ~= 'table' then
-        return
-    end
-
-    pcall(function()
-        exports.vrs_mechanic:SeedVehicleStatus(props.plate, persisted.status)
-    end)
+    QbxVehiclesVrsHooks.SeedPersistence(props)
 end
 
 local function cleanupVrsMechanicPersistence(plates)
-    if not isVrsMechanicActive() or type(plates) ~= 'table' then
-        return
-    end
-
-    for i = 1, #plates do
-        pcall(function()
-            exports.vrs_mechanic:RemoveVehicleStatus(plates[i])
-        end)
-    end
+    QbxVehiclesVrsHooks.CleanupPersistence(plates)
 end
-
 
 ---Returns true if the given plate exists
 ---@param plate string
@@ -349,11 +317,8 @@ local function saveVehicle(vehicle, options)
     options = options or {}
 
     if options.state == State.GARAGED and isVrsMechanicActive() then
-        local ok, canStore, reason = pcall(function()
-            return exports.vrs_mechanic:CanStoreVehicle(vehicle, options)
-        end)
-
-        if ok and canStore == false then
+        local canStore, reason = QbxVehiclesVrsHooks.ValidateStorage(vehicle, options)
+        if canStore == false then
             return false, {
                 code = reason or 'mechanic_blocked',
                 message = 'vrs_mechanic blocked vehicle storage for the current mechanical state'

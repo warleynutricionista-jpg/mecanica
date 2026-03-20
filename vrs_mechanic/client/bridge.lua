@@ -215,3 +215,7 @@ exports('CanPushVehicle', VRS.CanPushVehicle)
 exports('CanLockpickVehicle', VRS.CanLockpickVehicle)
 exports('CanUseVehicleRadio', VRS.CanUseVehicleRadio)
 exports('IsVehicleDisabledByMechanic', VRS.IsVehicleDisabledByMechanic)
+
+exports('GetIntegrationReasonMessage', function(action, reason)
+    return VRS.GetIntegrationReasonMessage(reason, action)
+end)

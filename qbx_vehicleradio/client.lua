@@ -6,14 +6,18 @@ local function isVrsMechanicActive()
 end
 
 local function notifyRadioRestriction(reason)
-    local messages = {
+    local fallback = {
         no_power = 'O sistema elétrico do veículo não suporta o rádio agora.',
         service_active = 'O rádio foi bloqueado durante o serviço mecânico.',
         vehicle_on_lift = 'O rádio está bloqueado enquanto o veículo estiver no elevador.',
         engine_off = 'Ligue o veículo para usar o rádio.',
     }
 
-    exports.qbx_core:Notify(messages[reason] or 'O estado mecânico atual bloqueou o rádio.', 'error')
+    local ok, message = pcall(function()
+        return exports.vrs_mechanic:GetIntegrationReasonMessage('radio', reason)
+    end)
+
+    exports.qbx_core:Notify(ok and message or fallback[reason] or 'O estado mecânico atual bloqueou o rádio.', 'error')
 end
 
 local function canUseRadio(vehicle, notify)

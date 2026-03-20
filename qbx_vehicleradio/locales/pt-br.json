@@ -1,0 +1,8 @@
+{
+  "success": {
+    "vehicle_radio_on": "Rádio do veículo ligado."
+  },
+  "error": {
+    "vehicle_radio_off": "Rádio do veículo desligado."
+  }
+}

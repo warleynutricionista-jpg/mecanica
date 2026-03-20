@@ -4,6 +4,20 @@ local function isVrsMechanicActive()
     return GetResourceState('vrs_mechanic') == 'started'
 end
 
+
+local function getIntegrationMessage(reason)
+    local fallback = {
+        service_active = 'Este veículo está em serviço mecânico e não pode ser arrombado agora.',
+        vehicle_on_lift = 'Este veículo está no elevador e o lockpick foi bloqueado.',
+    }
+
+    local ok, message = pcall(function()
+        return exports.vrs_mechanic:GetIntegrationReasonMessage('lockpick', reason)
+    end)
+
+    return ok and message or fallback[reason] or 'A integração mecânica bloqueou o lockpick.'
+end
+
 local function getRelevantVehicle()
     if cache.vehicle and cache.vehicle ~= 0 and DoesEntityExist(cache.vehicle) then
         return cache.vehicle
@@ -33,12 +47,7 @@ local function validateLockpickIntegration(success)
         return success
     end
 
-    local messages = {
-        service_active = 'Este veículo está em serviço mecânico e não pode ser arrombado agora.',
-        vehicle_on_lift = 'Este veículo está no elevador e o lockpick foi bloqueado.',
-    }
-
-    exports.qbx_core:Notify(messages[reason] or 'A integração mecânica bloqueou o lockpick.', 'error')
+    exports.qbx_core:Notify(getIntegrationMessage(reason), 'error')
     return false
 end
 

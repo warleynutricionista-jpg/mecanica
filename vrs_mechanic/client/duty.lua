@@ -183,16 +183,6 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         }
     end
 
-    options[#options + 1] = {
-        title = 'Gerenciar elevador',
-        description = 'Criar, editar, listar ou remover elevadores desta oficina.',
-        icon = 'fas fa-screwdriver-wrench',
-        onSelect = function()
-            local lift = resolvedLift.lift
-            VRS.OpenLiftAdminMenu(shopId, lift and lift.id or nil)
-        end,
-    }
-
     lib.registerContext({
         id = 'vrs_lift_menu',
         title = VRS.L.shop.title:format(shop.label),

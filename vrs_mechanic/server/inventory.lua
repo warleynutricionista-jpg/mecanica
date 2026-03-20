@@ -10,12 +10,14 @@ CreateThread(function()
         if shop.stash and shop.type == 'owned' then
             local stashId = ('vrs_mechanic_%s'):format(shopId)
             local groups = shop.job and { [shop.job] = 0 } or nil
+            local slots = tonumber(shop.stash.slots) or 50
+            local weight = tonumber(shop.stash.weight) or 50000
 
             exports.ox_inventory:RegisterStash(
                 stashId,
                 ('Estoque - %s'):format(shop.label),
-                shop.stash.slots,
-                shop.stash.weight,
+                slots,
+                weight,
                 nil, -- owner (nil = compartilhado pelo job)
                 groups
             )

@@ -66,14 +66,14 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
     end
 
     local liftKey = VRS.GetLiftKey(shopId, liftIndex)
-    local state = VRS.RefreshLiftState(shopId, liftIndex) or (VRS.LiftState and VRS.LiftState[liftKey]) or { height = Config.Lift.MinHeight or 0.0 }
+    local state = VRS.RefreshLiftState(shopId, liftIndex) or (VRS.LiftState and VRS.LiftState[liftKey]) or { height = Config.Lift.MinHeight or 0.0, minHeight = Config.Lift.MinHeight or 0.0 }
     local vehicleNetId = state.vehicleNetId
     local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
 
     local options = {
         {
             title = 'Status do Elevador',
-            description = ('Altura atual: %.2fm | %s'):format(state.height or 0.0, VRS.GetLiftHeightLabel(state.height or 0.0)),
+            description = ('Altura atual: %.2fm | %s'):format(state.height or 0.0, VRS.GetLiftHeightLabel(state.height or 0.0, shopId, liftIndex)),
             icon = 'fas fa-arrows-up-down',
             readOnly = true,
         },
@@ -132,11 +132,11 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
 
         options[#options + 1] = {
             title = VRS.L.shop.lift_remove,
-            description = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.05)
+            description = (state.height or 0.0) > (((state.minHeight or Config.Lift.MinHeight or 0.0)) + 0.05)
                 and 'Abaixe totalmente o elevador antes de retirar o veículo.'
                 or 'Liberar o veículo da plataforma.',
             icon = 'fas fa-right-from-bracket',
-            disabled = (state.height or 0.0) > ((Config.Lift.MinHeight or 0.0) + 0.05),
+            disabled = (state.height or 0.0) > (((state.minHeight or Config.Lift.MinHeight or 0.0)) + 0.05),
             onSelect = function()
                 VRS.RemoveFromLift(shopId, liftIndex, vehicle)
             end,
@@ -151,6 +151,16 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
             end,
         }
     end
+
+    options[#options + 1] = {
+        title = 'Gerenciar elevador',
+        description = 'Criar, editar, listar ou remover elevadores desta oficina.',
+        icon = 'fas fa-screwdriver-wrench',
+        onSelect = function()
+            local lift = shop.lifts and shop.lifts[liftIndex]
+            VRS.OpenLiftAdminMenu(shopId, lift and lift.id or nil)
+        end,
+    }
 
     lib.registerContext({
         id = 'vrs_lift_menu',
@@ -173,7 +183,7 @@ function VRS.PlaceOnLift(shopId, liftIndex)
     if not lift then return end
 
     local plate = VRS.GetPlate(vehicle)
-    local coords, heading = VRS.GetLiftWorldCoords(shopId, liftIndex, Config.Lift.MinHeight or 0.0)
+    local coords, heading = VRS.GetLiftWorldCoords(shopId, liftIndex, (lift.minHeight or Config.Lift.MinHeight or 0.0))
     if not coords then return end
 
     -- Remover motorista se necessário
@@ -250,7 +260,7 @@ function VRS.RemoveFromLift(shopId, liftIndex, vehicle)
 
     local liftKey = VRS.GetLiftKey(shopId, liftIndex)
     if VRS.LiftState then
-        VRS.LiftState[liftKey] = { height = Config.Lift.MinHeight or 0.0, vehicleNetId = nil }
+        VRS.LiftState[liftKey] = { height = (lift.minHeight or Config.Lift.MinHeight or 0.0), minHeight = (lift.minHeight or Config.Lift.MinHeight or 0.0), vehicleNetId = nil }
     end
     VRS.OnLift[liftKey] = nil
 

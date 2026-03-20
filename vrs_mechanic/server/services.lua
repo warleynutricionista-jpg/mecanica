@@ -71,8 +71,8 @@ lib.callback.register('vrs_mechanic:server:beginVehicleService', function(source
     }
 
     if data and data.netId then
-        local vehicle = NetworkGetEntityFromNetworkId(data.netId)
-        if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        local vehicle = VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(data.netId, true) or nil
+        if vehicle then
             Entity(vehicle).state:set('vrs:service', VRS.ActiveServices[lockKey], true)
         end
     end
@@ -89,8 +89,8 @@ lib.callback.register('vrs_mechanic:server:endVehicleService', function(source, 
     local active = lockKey and VRS.ActiveServices[lockKey]
     if active and active.source == source then
         if active.netId then
-            local vehicle = NetworkGetEntityFromNetworkId(active.netId)
-            if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+            local vehicle = VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(active.netId, true) or nil
+            if vehicle then
                 Entity(vehicle).state:set('vrs:service', nil, true)
             end
         end
@@ -111,8 +111,8 @@ AddEventHandler('playerDropped', function()
     for lockKey, active in pairs(VRS.ActiveServices) do
         if active and active.source == src then
             if active.netId then
-                local vehicle = NetworkGetEntityFromNetworkId(active.netId)
-                if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+                local vehicle = VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(active.netId, true) or nil
+                if vehicle then
                     Entity(vehicle).state:set('vrs:service', nil, true)
                 end
             end

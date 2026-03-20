@@ -14,6 +14,18 @@ local function requestControl(entity)
     return NetworkHasControlOfEntity(entity)
 end
 
+local function removeVehicleOccupants(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
+
+    local maxPassengers = GetVehicleMaxNumberOfPassengers(vehicle)
+    for seat = -1, maxPassengers - 1 do
+        local ped = GetPedInVehicleSeat(vehicle, seat)
+        if ped and ped ~= 0 then
+            TaskLeaveVehicle(ped, vehicle, 0)
+        end
+    end
+end
+
 function VRS.ToggleDuty()
     if not VRS.IsMechanic() then
         lib.notify({ title = 'Erro', description = VRS.L.repair.not_mechanic, type = 'error' })
@@ -82,9 +94,12 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
     end
 
     VRS.LiftDebugLog('liftMenu', ('Abrindo menu do elevador %s para shop=%s index=%s'):format(liftKey, shopId, liftIndex))
-    local state = VRS.RefreshLiftState(shopId, liftIndex) or (VRS.LiftState and VRS.LiftState[liftKey]) or { height = Config.Lift.MinHeight or 0.0, minHeight = Config.Lift.MinHeight or 0.0 }
+    local state = VRS.GetLiftStateSnapshot(shopId, liftIndex)
+    if VRS.RefreshLiftState then
+        state = VRS.RefreshLiftState(shopId, liftIndex) or state
+    end
     local vehicleNetId = state.vehicleNetId
-    local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
+    local vehicle = vehicleNetId and VRS.GetEntityFromNetId(vehicleNetId, true) or 0
 
     local options = {
         {
@@ -188,26 +203,33 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
 end
 
 function VRS.PlaceOnLift(shopId, liftIndex)
-    local vehicle = VRS.GetClosestVehicle(Config.Lift.snapDistance)
+    local vehicle, reason, placement = VRS.FindBestVehicleForLift(shopId, liftIndex, Config.Lift.snapDistance)
     if not vehicle then
-        lib.notify({ title = 'Erro', description = VRS.L.shop.no_vehicle_near, type = 'error' })
+        local messages = {
+            no_vehicle = VRS.L.shop.no_vehicle_near,
+            invalid_vehicle = 'Nenhum veículo válido foi encontrado próximo ao elevador.',
+            vehicle_moving = 'O veículo precisa estar completamente parado para usar o elevador.',
+            vehicle_occupied = 'Retire todos os ocupantes do veículo antes de usar o elevador.',
+            vehicle_bad_heading = 'Alinhe melhor o veículo com o elevador antes de posicioná-lo.',
+            vehicle_outside_length = 'Aproxime mais o veículo do centro do elevador.',
+            vehicle_outside_width = 'Centralize melhor o veículo entre as colunas do elevador.',
+            vehicle_already_on_other_lift = 'Este veículo já está vinculado a outro elevador.',
+            unsupported_vehicle = 'Este tipo de veículo não é compatível com este elevador.',
+        }
+        lib.notify({ title = 'Elevador', description = messages[reason] or VRS.L.shop.no_vehicle_near, type = 'error' })
         return
     end
 
-    local shop = Config.Shops[shopId]
-    local lift = shop and shop.lifts and shop.lifts[liftIndex]
+    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
+    local lift = resolvedLift and resolvedLift.lift or nil
     if not lift then return end
 
     local plate = VRS.GetPlate(vehicle)
     local coords, heading = VRS.GetLiftWorldCoords(shopId, liftIndex, (lift.minHeight or Config.Lift.MinHeight or 0.0))
     if not coords then return end
 
-    -- Remover motorista se necessário
-    local driver = GetPedInVehicleSeat(vehicle, -1)
-    if driver and driver ~= 0 then
-        TaskLeaveVehicle(driver, vehicle, 0)
-        Wait(2000)
-    end
+    removeVehicleOccupants(vehicle)
+    Wait(1000)
 
     -- Posicionar veículo na plataforma
     requestControl(vehicle)
@@ -223,7 +245,26 @@ function VRS.PlaceOnLift(shopId, liftIndex)
         SetEntityNoCollisionEntity(vehicle, liftData.platform, true)
     end
 
-    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    local netId, netReason = VRS.GetSafeNetId(vehicle)
+    if not netId then
+        FreezeEntityPosition(vehicle, false)
+        lib.notify({ title = 'Elevador', description = ('Falha de rede ao registrar o veículo (%s).'):format(netReason or 'sem net id'), type = 'error' })
+        return
+    end
+
+    local aligned, alignedReason = VRS.ValidateVehicleForLift(shopId, liftIndex, vehicle)
+    if not aligned then
+        FreezeEntityPosition(vehicle, false)
+        local messages = {
+            vehicle_bad_heading = 'O veículo não ficou alinhado corretamente sobre o elevador.',
+            vehicle_outside_length = 'O veículo ficou fora do comprimento útil do elevador.',
+            vehicle_outside_width = 'O veículo ficou fora da largura útil do elevador.',
+            vehicle_occupied = 'Ainda existe ocupante no veículo.',
+        }
+        lib.notify({ title = 'Elevador', description = messages[alignedReason] or 'Não foi possível alinhar o veículo no elevador.', type = 'error' })
+        return
+    end
+
     local result = lib.callback.await('vrs_mechanic:server:placeVehicleOnLift', false, shopId, liftIndex, netId, plate)
     if not result or not result.success then
         FreezeEntityPosition(vehicle, false)
@@ -234,6 +275,11 @@ function VRS.PlaceOnLift(shopId, liftIndex)
             not_on_duty = VRS.L.repair.not_on_duty,
             too_far = 'O veículo saiu da área válida do elevador.',
             lift_busy = 'Elevador em movimento. Aguarde.',
+            invalid_vehicle = 'A entidade do veículo ficou inválida durante o posicionamento.',
+            vehicle_already_on_other_lift = 'Este veículo já está associado a outro elevador.',
+            vehicle_bad_heading = 'O servidor recusou o veículo por desalinhamento.',
+            vehicle_outside_length = 'O servidor recusou o veículo por estar fora do comprimento útil.',
+            vehicle_outside_width = 'O servidor recusou o veículo por estar fora da largura útil.',
         }
         lib.notify({ title = 'Elevador', description = messages[reason] or 'Não foi possível posicionar o veículo.', type = 'error' })
         return

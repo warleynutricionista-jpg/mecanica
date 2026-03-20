@@ -1,5 +1,6 @@
 local VehicleKeys = require 'client.interface'
 local VehicleSecurity = require 'client.modules.vehicle_security'
+local VehicleIntegrations = require 'client.modules.vehicle_integrations'
 local Action = require 'client.modules.action_helper'
 
 local LockPick = { lockpicking = false, activeToken = nil }
@@ -110,6 +111,7 @@ function LockPick:LockPickDoor(isAdvanced)
     local vehicle = lib.getClosestVehicle(GetEntityCoords(cache.ped), 3.0, false)
     if not vehicle or GetVehicleDoorLockStatus(vehicle) == 1 then return end
     if self.lockpicking then return end
+    if not VehicleIntegrations:CanLockpick(vehicle, true) then return end
 
     self.lockpicking = true
     local result, reason, started = self:RunServerStages(vehicle, 'door')
@@ -136,6 +138,7 @@ end
 
 function LockPick:LockPickEngine(isAdvanced)
     if VehicleKeys.currentVehicle == 0 or GetIsVehicleEngineRunning(VehicleKeys.currentVehicle) then return end
+    if not VehicleIntegrations:CanLockpick(VehicleKeys.currentVehicle, true) then return end
     if not VehicleKeys.isInDrivingSeat then
         Action:Notify(Shared.text.mustBeDriver or Shared.text.invalidTarget, 'error')
         return

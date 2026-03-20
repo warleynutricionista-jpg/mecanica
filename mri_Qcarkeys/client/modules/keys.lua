@@ -1,5 +1,6 @@
 local VehicleKeys = require 'client.interface'
 local InventoryBridge = require 'bridge.inventory.client'
+local VehicleIntegrations = require 'client.modules.vehicle_integrations'
 local Utils = require 'client.modules.utils'
 
 local KeyManagement = {
@@ -209,6 +210,8 @@ RegisterCommand('mri:engine', function()
     end
 
     if (not Shared.keepKeysInVehicle and VehicleKeys.hasKey) or Entity(VehicleKeys.currentVehicle).state['keysIn'] or exports.mri_Qcarkeys:HavePermanentKey(vehiclePlate) or KeyManagement:HasTemporaryKey(vehiclePlate, NetworkGetNetworkIdFromEntity(VehicleKeys.currentVehicle)) then
+        if not VehicleIntegrations:CanUseIgnition(VehicleKeys.currentVehicle, true) then return end
+
         SetVehicleEngineOn(VehicleKeys.currentVehicle, true, false, true)
         VehicleKeys.isEngineRunning = true
         if Shared.keepKeysInVehicle then

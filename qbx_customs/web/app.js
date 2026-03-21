@@ -307,6 +307,18 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state?.visible) {
+    post('focusLost');
+  }
+});
+
+window.addEventListener('blur', () => {
+  if (state?.visible) {
+    post('focusLost');
+  }
+});
+
 applyBtn.addEventListener('click', () => {
   if (!isOpen || !state?.currentOption || !state?.currentChoice) return;
   post('installChoice', { optionId: state.currentOption, choiceId: state.currentChoice });

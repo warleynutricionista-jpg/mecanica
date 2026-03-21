@@ -80,12 +80,14 @@ Config.Locations = {
         },
         jobs = { 'mechanic' },
         sprays = {
-            { pos = vec3(-3088.12, 426.48, 6.99), rotation = vec3(0.0, 25.0, -111.817), scale = 1.2 },
-            { pos = vec3(-3086.68, 425.76, 6.99), rotation = vec3(0.0, 25.0, -114.508), scale = 1.2 },
-            { pos = vec3(-3085.14, 425.04, 6.99), rotation = vec3(0.0, 25.0, 70.213), scale = 1.2 },
-            { pos = vec3(-3086.95, 421.74, 6.99), rotation = vec3(0.0, 25.0, 72.735), scale = 1.2 },
-            { pos = vec3(-3087.99, 422.4, 6.99), rotation = vec3(1.074, 25.568, 161.155), scale = 1.2 },
-            { pos = vec3(-3089.55, 422.99, 6.99), rotation = vec3(-0.875, 24.862, 160.072), scale = 1.2 },
+            -- Esquerda
+            { pos = vec3(-3087.02, 421.49, 8.33), rotation = vec3(0.0, 25.0, 80.0), scale = 1.2 },
+            { pos = vec3(-3088.45, 422.18, 8.33), rotation = vec3(0.0, 25.0, 80.0), scale = 1.2 },
+            { pos = vec3(-3089.95, 422.90, 8.33), rotation = vec3(0.0, 25.0, 80.0), scale = 1.2 },
+            -- Direira
+            { pos = vec3(-3087.78, 426.70, 8.33), rotation = vec3(0.0, 25.0, -80), scale = 1.2 },
+            { pos = vec3(-3086.40, 426.04, 8.33), rotation = vec3(1.074, 25.568, -80), scale = 1.2 },
+            { pos = vec3(-3085.04, 425.38, 8.33), rotation = vec3(-0.875, 24.862, -80), scale = 1.2 },
         },
         previewCam = {
             coords = vec4(-3082.55, 419.61, 8.92, 53.0),
@@ -94,3 +96,4 @@ Config.Locations = {
         blip = false,
     },
 }
+

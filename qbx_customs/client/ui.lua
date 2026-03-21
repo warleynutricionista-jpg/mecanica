@@ -6,8 +6,8 @@ local validator = require 'client.services.validator'
 local ui = {}
 local runtimeCatalog
 
-local function rebuildPayload()
-    local built = payloadBuilder.build()
+local function rebuildPayload(action)
+    local built = payloadBuilder.build(action)
     runtimeCatalog = built.catalog
     return built.nui
 end
@@ -18,7 +18,7 @@ local function refreshMenu()
         return false
     end
 
-    SendNUIMessage(rebuildPayload())
+    SendNUIMessage(rebuildPayload('sync'))
     return true
 end
 
@@ -38,8 +38,9 @@ local function getChoice(option, choiceId)
 end
 
 function ui.open()
+    SendNUIMessage(rebuildPayload('open'))
     SetNuiFocus(true, true)
-    SendNUIMessage(rebuildPayload())
+    SetNuiFocusKeepInput(false)
 end
 
 function ui.refresh()
@@ -47,8 +48,10 @@ function ui.refresh()
 end
 
 function ui.hide()
-    SetNuiFocus(false, false)
+    runtimeCatalog = nil
     SendNUIMessage({ action = 'close' })
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
 end
 
 function ui.getOption(optionId)

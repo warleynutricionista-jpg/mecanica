@@ -157,7 +157,9 @@ local function buildChoices(currentOption)
     return choicesPayload, selectedPrice
 end
 
-function payload.build()
+function payload.build(action)
+    action = action or 'sync'
+
     local runtimeCatalog = catalog.build()
     local currentCategory, currentOption = ensureSelection(runtimeCatalog)
     local choicesPayload, selectedPrice = buildChoices(currentOption)
@@ -165,8 +167,8 @@ function payload.build()
     return {
         catalog = runtimeCatalog,
         nui = {
-            action = 'open',
-            visible = true,
+            action = action,
+            visible = action ~= 'close',
             currency = config.currency,
             currentCategory = session.selectedCategory,
             currentOption = session.selectedOption,

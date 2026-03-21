@@ -1,4 +1,5 @@
 const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'qbx_customs';
+const body = document.body;
 const app = document.getElementById('app');
 const categoriesEl = document.getElementById('categories');
 const optionsEl = document.getElementById('options');
@@ -27,6 +28,7 @@ const restoreBtn = document.getElementById('restore-btn');
 const closeBtn = document.getElementById('close-btn');
 
 let state = null;
+let isOpen = false;
 let previewRequest = null;
 const iconBasePath = 'assets/renzu-icons';
 
@@ -40,13 +42,54 @@ function post(event, data = {}) {
   });
 }
 
+function setVisibility(visible) {
+  isOpen = visible;
+  body.classList.toggle('nui-open', visible);
+  app.classList.toggle('is-open', visible);
+  app.classList.toggle('hidden', !visible);
+}
+
+function clearView() {
+  categoriesEl.innerHTML = '';
+  optionsEl.innerHTML = '';
+  choicesEl.innerHTML = '';
+  emptyOptionsEl.textContent = '';
+  emptyChoicesEl.textContent = '';
+  breadcrumbEl.textContent = '';
+  titleEl.textContent = '';
+  vehicleNameEl.textContent = '';
+  vehicleClassEl.textContent = '';
+  vehiclePlateEl.textContent = '';
+  selectedLabelEl.textContent = '';
+  selectedPriceEl.textContent = '';
+  sessionLabelEl.textContent = '';
+  sessionTotalEl.textContent = '';
+  hintLabelEl.textContent = '';
+  optionsTitleEl.textContent = '';
+  optionsSubtitleEl.textContent = '';
+  previewTitleEl.textContent = '';
+  previewSubtitleEl.textContent = '';
+  statusChipEl.className = 'status-chip';
+  statusChipEl.textContent = '';
+  optionNameEl.textContent = '';
+  optionGroupEl.textContent = '';
+  applyBtn.disabled = true;
+}
+
+function closeView() {
+  previewRequest = null;
+  state = null;
+  setVisibility(false);
+  clearView();
+}
+
 function schedulePreview(choiceId) {
-  if (!state?.currentOption || !choiceId) return;
+  if (!isOpen || !state?.currentOption || !choiceId) return;
   if (previewRequest === choiceId) return;
 
   previewRequest = choiceId;
   window.requestAnimationFrame(() => {
-    if (previewRequest !== choiceId || !state?.currentOption) return;
+    if (!isOpen || previewRequest !== choiceId || !state?.currentOption) return;
     post('previewChoice', { optionId: state.currentOption, choiceId });
   });
 }
@@ -91,10 +134,6 @@ function createInfoMain(title, description, className = 'item-main') {
   container.appendChild(text);
 
   return container;
-}
-
-function setVisibility(visible) {
-  app.classList.toggle('hidden', !visible);
 }
 
 function activeCategory() {
@@ -228,9 +267,14 @@ function renderChoices() {
 }
 
 function render(payload) {
+  if (!payload?.visible) {
+    closeView();
+    return;
+  }
+
   state = payload;
   previewRequest = null;
-  setVisibility(payload.visible);
+  setVisibility(true);
   renderCategories();
   renderOptions();
   renderChoices();
@@ -238,18 +282,26 @@ function render(payload) {
 
 window.addEventListener('message', (event) => {
   const payload = event.data;
-  if (payload.action === 'open') {
-    render(payload);
-  }
+  if (!payload || !payload.action) return;
 
   if (payload.action === 'close') {
-    setVisibility(false);
-    previewRequest = null;
-    state = null;
+    closeView();
+    return;
+  }
+
+  if (payload.action === 'open') {
+    render(payload);
+    return;
+  }
+
+  if (payload.action === 'sync' && isOpen) {
+    render(payload);
   }
 });
 
 window.addEventListener('keydown', (event) => {
+  if (!isOpen) return;
+
   if (event.key === 'Escape') {
     post('close');
   }
@@ -268,9 +320,18 @@ window.addEventListener('blur', () => {
 });
 
 applyBtn.addEventListener('click', () => {
-  if (!state?.currentOption || !state?.currentChoice) return;
+  if (!isOpen || !state?.currentOption || !state?.currentChoice) return;
   post('installChoice', { optionId: state.currentOption, choiceId: state.currentChoice });
 });
 
-restoreBtn.addEventListener('click', () => post('restorePreview'));
-closeBtn.addEventListener('click', () => post('close'));
+restoreBtn.addEventListener('click', () => {
+  if (!isOpen) return;
+  post('restorePreview');
+});
+
+closeBtn.addEventListener('click', () => {
+  if (!isOpen) return;
+  post('close');
+});
+
+closeView();

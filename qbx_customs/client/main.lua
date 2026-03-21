@@ -31,8 +31,6 @@ local function notifyCloseReason(reason)
         feedback.notify(locale('notifications.error.invalidVehicle'), 'error')
     elseif reason == 'busy' then
         feedback.notify(locale('notifications.error.busy'), 'error')
-    elseif reason == 'focusLost' then
-        feedback.notify(locale('notifications.error.focusLost'), 'error')
     end
 end
 
@@ -87,7 +85,7 @@ local function startSessionGuard()
             end
 
             if IsPauseMenuActive() then
-                closeMenu(true, 'focusLost')
+                closeMenu(true)
                 break
             end
         end
@@ -133,10 +131,6 @@ RegisterNUICallback('close', function(_, cb)
     cb(1)
 end)
 
-RegisterNUICallback('focusLost', function(_, cb)
-    closeMenu(true, 'focusLost')
-    cb(1)
-end)
 
 RegisterNUICallback('restorePreview', function(_, cb)
     if ensureSessionOrClose(false) then

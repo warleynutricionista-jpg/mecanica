@@ -22,17 +22,31 @@ html, body {
   overflow: hidden;
 }
 body {
-  background: transparent;
+  background: transparent !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+body.nui-open {
+  visibility: visible;
+  pointer-events: auto;
 }
 .hidden { display: none !important; }
 .app {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
   width: 100%;
   height: 100%;
   padding: 2.5vh 2.5vw;
   background:
     radial-gradient(circle at top right, rgba(96, 165, 250, 0.16), transparent 30%),
     radial-gradient(circle at bottom left, rgba(52, 211, 153, 0.12), transparent 26%),
-    rgba(4, 7, 12, 0.32);
+    rgba(4, 7, 12, 0.18);
+}
+.app.is-open {
+  display: block;
+  opacity: 1;
+  pointer-events: auto;
 }
 .shell {
   width: 100%;

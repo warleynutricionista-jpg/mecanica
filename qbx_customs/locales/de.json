@@ -8,7 +8,10 @@
       "money": "You do not have enough money!",
       "alreadyInstalled": "This modification is already installed.",
       "driverSeat": "You must be in the driver seat to open customs.",
-      "invalidVehicle": "Das Fahrzeug ist für die Anpassung nicht mehr verfügbar."
+      "invalidVehicle": "Das Fahrzeug ist für die Anpassung nicht mehr verfügbar.",
+      "busy": "Customs is already open.",
+      "focusLost": "Customization closed because the interface lost focus.",
+      "applyFailed": "The selected modification could not be previewed safely."
     },
     "props": {
       "installTitle": "Customs"
@@ -85,7 +88,9 @@
     "installedHint": "Already installed on the vehicle.",
     "actionHint": "Direct action for this service.",
     "repairNow": "Run repair",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "variations": "variations",
+    "previewFallback": "Preview"
   },
   "general": {
     "payReason": "Customs"

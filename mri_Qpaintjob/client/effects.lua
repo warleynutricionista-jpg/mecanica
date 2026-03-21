@@ -35,6 +35,26 @@ local function stopHandle(handle)
     end
 end
 
+local function normalizeParticleCandidates(definition)
+    if not definition then return {} end
+    if definition.candidates and #definition.candidates > 0 then
+        return definition.candidates
+    end
+    if definition.dict and definition.name then
+        return { definition }
+    end
+    return {}
+end
+
+local function resolveParticleFx(definition)
+    for _, candidate in ipairs(normalizeParticleCandidates(definition)) do
+        if loadPtfx(candidate.dict) then
+            return candidate
+        end
+    end
+    return nil
+end
+
 local function clamp(value, minValue, maxValue)
     return math.max(minValue, math.min(maxValue, value))
 end
@@ -128,8 +148,9 @@ function Effects.startBooth(boothId, vehicle, color)
     local booth = Utils.getBooth(boothId)
     if not booth then return end
 
-    local sprayFx = Config.Particles.Spray
-    if not loadPtfx(sprayFx.dict) then return end
+    local sprayFx = resolveParticleFx(Config.Particles.Spray)
+    local impactFx = resolveParticleFx(Config.Particles.Impact)
+    if not sprayFx and not impactFx then return end
 
     Effects.active[boothId] = { handles = {} }
 
@@ -139,20 +160,40 @@ function Effects.startBooth(boothId, vehicle, color)
             local sourceCoords = getSpraySourceCoords(spray, object)
             local targetCoords = getVehicleTargetCoords(vehicle, sourceCoords, booth.vehicle)
             local rot = calculateSprayRotation(sourceCoords, targetCoords, spray.rotation)
-            UseParticleFxAsset(sprayFx.dict)
-            local handle = StartParticleFxLoopedAtCoord(
-                sprayFx.name,
-                sourceCoords.x, sourceCoords.y, sourceCoords.z,
-                rot.x, rot.y, rot.z,
-                spray.scale or sprayFx.scale or 1.0,
-                false, false, false, false
-            )
+            local rgb = color or { r = 255, g = 255, b = 255 }
 
-            if handle and handle ~= -1 then
-                local rgb = color or { r = 255, g = 255, b = 255 }
-                SetParticleFxLoopedColour(handle, rgb.r / 255.0, rgb.g / 255.0, rgb.b / 255.0, false)
-                SetParticleFxLoopedAlpha(handle, sprayFx.alpha or 0.85)
-                Effects.active[boothId].handles[#Effects.active[boothId].handles + 1] = handle
+            if sprayFx then
+                UseParticleFxAsset(sprayFx.dict)
+                local sprayHandle = StartParticleFxLoopedAtCoord(
+                    sprayFx.name,
+                    sourceCoords.x, sourceCoords.y, sourceCoords.z,
+                    rot.x, rot.y, rot.z,
+                    spray.scale or sprayFx.scale or 1.0,
+                    false, false, false, false
+                )
+
+                if sprayHandle and sprayHandle ~= -1 then
+                    SetParticleFxLoopedColour(sprayHandle, rgb.r / 255.0, rgb.g / 255.0, rgb.b / 255.0, false)
+                    SetParticleFxLoopedAlpha(sprayHandle, sprayFx.alpha or 0.85)
+                    Effects.active[boothId].handles[#Effects.active[boothId].handles + 1] = sprayHandle
+                end
+            end
+
+            if impactFx then
+                UseParticleFxAsset(impactFx.dict)
+                local impactHandle = StartParticleFxLoopedAtCoord(
+                    impactFx.name,
+                    targetCoords.x, targetCoords.y, targetCoords.z,
+                    rot.x, rot.y, rot.z,
+                    spray.impactScale or impactFx.scale or 0.45,
+                    false, false, false, false
+                )
+
+                if impactHandle and impactHandle ~= -1 then
+                    SetParticleFxLoopedColour(impactHandle, rgb.r / 255.0, rgb.g / 255.0, rgb.b / 255.0, false)
+                    SetParticleFxLoopedAlpha(impactHandle, impactFx.alpha or 0.45)
+                    Effects.active[boothId].handles[#Effects.active[boothId].handles + 1] = impactHandle
+                end
             end
         end
     end

@@ -28,6 +28,25 @@ local function destroySessionCamera()
     painter.camera = nil
 end
 
+local function startHeartbeat(session)
+    if not session then return end
+
+    State.painter = State.painter or {}
+    State.painter.heartbeat = true
+
+    CreateThread(function()
+        while State.activeSession and State.activeSession.token == session.token and State.painter and State.painter.heartbeat do
+            TriggerServerEvent('mri_Qpaintjob:server:touchSession', session.boothId, session.token)
+            Wait((Config.SessionHeartbeatInterval or 15) * 1000)
+        end
+    end)
+end
+
+local function stopHeartbeat()
+    if not State.painter then return end
+    State.painter.heartbeat = false
+end
+
 local function setupSessionCamera(session)
     if not Config.UI.Camera.enabled then return end
     if not session or not Utils.isValidVehicle(session.vehicle) then return end
@@ -56,20 +75,22 @@ local function setupSessionCamera(session)
     State.painter.camera = cam
 end
 
-local function releaseSession(reason, silent)
-    local session = State.activeSession
+local function cleanupSession(session, restoreOriginal, reason, silent)
     if not session then return end
 
     if lib.progressActive() then
         lib.cancelProgress()
     end
 
+    stopHeartbeat()
     Effects.stopBooth(session.boothId)
     destroySessionCamera()
 
     if Utils.isValidVehicle(session.vehicle) then
         FreezeEntityPosition(session.vehicle, false)
-        Utils.applyPaintState(session.vehicle, session.originalState)
+        if restoreOriginal then
+            Utils.applyPaintState(session.vehicle, session.originalState)
+        end
     end
 
     TriggerServerEvent('mri_Qpaintjob:server:releaseSession', session.boothId, session.token, reason or 'release')
@@ -106,34 +127,56 @@ function Paint.restoreOriginal(session)
     Utils.applyPaintState(session.vehicle, session.originalState)
 end
 
+function Paint.setPreviewEnabled(state)
+    local session = State.activeSession
+    if not session then return end
+
+    session.preview = state == true
+    if session.preview then
+        Paint.applyPreview(session)
+    else
+        Paint.restoreOriginal(session)
+    end
+end
+
 function Paint.beginSession(boothId)
     if State.activeSession then
         Utils.notify({ type = 'error', description = 'Já existe uma cabine em edição.' })
+        Utils.playFrontendSound('error')
         return nil
     end
 
     local booth = Utils.getBooth(boothId)
     if not booth then
         Utils.notify({ type = 'error', description = 'Cabine inválida.' })
+        Utils.playFrontendSound('error')
+        return nil
+    end
+
+    if not Utils.hasJobAccess(booth) then
+        Utils.notify({ type = 'error', description = 'Seu job não possui acesso a esta cabine.' })
+        Utils.playFrontendSound('error')
         return nil
     end
 
     local vehicle, reason = Utils.findVehicleInBooth(boothId)
     if not vehicle then
-        local message = reason == 'vehicle_outside_booth' and 'Posicione o veículo corretamente dentro da cabine.' or 'Nenhum veículo foi detectado na cabine.'
-        Utils.notify({ type = 'error', description = message })
+        Utils.notify({ type = 'error', description = Utils.getReasonMessage(reason) })
+        Utils.playFrontendSound('error')
         return nil
     end
 
-    local netId = Utils.getSafeNetId(vehicle)
+    local netId, netReason = Utils.getSafeNetId(vehicle)
     if not netId then
-        Utils.notify({ type = 'error', description = 'Não foi possível sincronizar o veículo da cabine.' })
+        Utils.notify({ type = 'error', description = Utils.getReasonMessage(netReason) })
+        Utils.playFrontendSound('error')
         return nil
     end
 
     local ok, response = lib.callback.await('mri_Qpaintjob:server:beginSession', false, boothId, netId)
     if not ok then
         Utils.notify({ type = 'error', description = response and response.message or 'A cabine está ocupada ou indisponível.' })
+        Utils.playFrontendSound('error')
         return nil
     end
 
@@ -141,6 +184,7 @@ function Paint.beginSession(boothId)
     if not originalState then
         TriggerServerEvent('mri_Qpaintjob:server:releaseSession', boothId, response.token, 'invalid_vehicle_state')
         Utils.notify({ type = 'error', description = 'Não foi possível ler o estado atual da pintura.' })
+        Utils.playFrontendSound('error')
         return nil
     end
 
@@ -160,11 +204,13 @@ function Paint.beginSession(boothId)
     }
 
     setupSessionCamera(State.activeSession)
+    startHeartbeat(State.activeSession)
 
     if State.activeSession.preview then
         Paint.applyPreview(State.activeSession)
     end
 
+    Utils.playFrontendSound('start')
     return State.activeSession
 end
 
@@ -196,7 +242,8 @@ function Paint.updateSelection(kind, value)
 end
 
 function Paint.cancelSession(reason, silent)
-    releaseSession(reason or 'cancelada', silent)
+    cleanupSession(State.activeSession, true, reason or 'cancelada', silent)
+    Utils.playFrontendSound('cancel')
 end
 
 local function animateVehiclePaint(session, duration)
@@ -225,46 +272,73 @@ local function animateVehiclePaint(session, duration)
     end)
 end
 
+local function validateSessionBeforePaint(session)
+    if not session then
+        return false, 'Sessão de pintura inválida.'
+    end
+
+    if not Utils.isValidVehicle(session.vehicle) then
+        return false, 'O veículo não está mais disponível.'
+    end
+
+    local booth = Utils.getBooth(session.boothId)
+    if not booth then
+        return false, 'A cabine não está mais configurada corretamente.'
+    end
+
+    local boothVehiclePos = Utils.toVec3(booth.vehicle)
+    if not boothVehiclePos then
+        return false, 'As coordenadas do veículo na cabine estão inválidas.'
+    end
+
+    if Utils.distance(GetEntityCoords(session.vehicle), boothVehiclePos) > Utils.getVehicleRadius(booth) then
+        return false, 'O veículo saiu da posição correta da cabine.'
+    end
+
+    if not Utils.requestControl(session.vehicle, 2000) then
+        return false, 'Não foi possível obter controle do veículo para pintar.'
+    end
+
+    return true
+end
+
 function Paint.startProcess()
     local session = State.activeSession
-    if not session then return false end
-    if not Utils.isValidVehicle(session.vehicle) then
-        Utils.notify({ type = 'error', description = 'O veículo não está mais disponível.' })
-        releaseSession('veículo indisponível', true)
-        return false
-    end
-
-    local boothVehiclePos = Utils.toVec3(Config.Locations[session.boothId].vehicle)
-    if Utils.distance(GetEntityCoords(session.vehicle), boothVehiclePos) > Utils.getVehicleRadius(Config.Locations[session.boothId]) then
-        Utils.notify({ type = 'error', description = 'O veículo saiu da posição correta da cabine.' })
-        releaseSession('veículo fora da cabine', true)
-        return false
-    end
-
-    local controlOk = Utils.requestControl(session.vehicle, 2000)
-    if not controlOk then
-        Utils.notify({ type = 'error', description = 'Não foi possível obter controle do veículo para pintar.' })
+    local valid, validationMessage = validateSessionBeforePaint(session)
+    if not valid then
+        Utils.notify({ type = 'error', description = validationMessage })
+        Utils.playFrontendSound('error')
+        cleanupSession(session, true, validationMessage, true)
         return false
     end
 
     local confirmed = lib.alertDialog({
         header = Config.UI.Title,
-        content = ('Confirmar pintura premium em **%s**?\n\nCabine: **%s**\nAcabamento: **%s**'):format(Utils.getVehicleDisplayName(session.vehicle), session.boothName, Utils.getFinishByValue(session.selection.finish).label),
-        centered = true,
+        content = ('**%s**\n\nVeículo: **%s**\nCabine: **%s**\nPrimária: **%s**\nSecundária: **%s**\nAcabamento: **%s**'):format(
+            Config.UI.Subtitle,
+            Utils.getVehicleDisplayName(session.vehicle),
+            session.boothName,
+            Utils.rgbToHex(session.selection.primary),
+            Utils.rgbToHex(session.selection.secondary),
+            Utils.getFinishByValue(session.selection.finish).label
+        ),
+        centered = Config.UI.Confirmation.centered,
         cancel = true,
         labels = {
-            confirm = 'Iniciar pintura',
-            cancel = 'Voltar',
+            confirm = Config.UI.Confirmation.confirmLabel,
+            cancel = Config.UI.Confirmation.cancelLabel,
         },
     })
 
     if confirmed ~= 'confirm' then
+        Utils.playFrontendSound('cancel')
         return false
     end
 
     local ok, response = lib.callback.await('mri_Qpaintjob:server:startPaint', false, session.boothId, session.token, session.vehicleNetId, session.selection)
     if not ok then
         Utils.notify({ type = 'error', description = response and response.message or 'Falha ao iniciar a pintura.' })
+        Utils.playFrontendSound('error')
         return false
     end
 
@@ -291,12 +365,14 @@ function Paint.startProcess()
     State.painter.painting = false
     FreezeEntityPosition(session.vehicle, false)
     Effects.stopBooth(session.boothId)
+    stopHeartbeat()
 
     if success then
         Paint.applyPreview(session)
         TriggerServerEvent('mri_Qpaintjob:server:finishPaint', session.boothId, session.token, true)
         destroySessionCamera()
         Utils.notify({ type = 'success', description = 'Pintura aplicada com sucesso.' })
+        Utils.playFrontendSound('success')
         State.activeSession = nil
         State.painter = nil
         return true
@@ -306,6 +382,7 @@ function Paint.startProcess()
     TriggerServerEvent('mri_Qpaintjob:server:finishPaint', session.boothId, session.token, false)
     destroySessionCamera()
     Utils.notify({ type = 'warning', description = 'Pintura cancelada. O veículo foi restaurado.' })
+    Utils.playFrontendSound('cancel')
     State.activeSession = nil
     State.painter = nil
     return false
@@ -338,9 +415,9 @@ CreateThread(function()
             local booth = Utils.getBooth(session.boothId)
             local pedCoords = GetEntityCoords(cache.ped)
             if not booth or not Utils.isValidVehicle(session.vehicle) then
-                releaseSession('estado inválido', true)
+                cleanupSession(session, true, 'estado inválido', true)
             elseif Utils.distance(pedCoords, booth.control) > Config.UI.SessionBreakDistance then
-                releaseSession('você se afastou da cabine', false)
+                cleanupSession(session, true, 'você se afastou da cabine', false)
             end
             Wait(500)
         else
@@ -351,6 +428,6 @@ end)
 
 RegisterNetEvent('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    releaseSession('resource_stop', true)
+    cleanupSession(State.activeSession, true, 'resource_stop', true)
     Effects.cleanupAll()
 end)

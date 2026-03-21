@@ -8,6 +8,15 @@ for _, finish in ipairs(Config.FinishTypes or {}) do
     finishByValue[finish.value] = finish
 end
 
+local reasonMap = {
+    invalid_booth = 'Cabine inválida.',
+    invalid_vehicle_coords = 'Configuração da cabine inválida.',
+    vehicle_not_found = 'Nenhum veículo foi detectado na cabine.',
+    vehicle_outside_booth = 'Posicione o veículo corretamente dentro da cabine.',
+    invalid_vehicle = 'O veículo não está disponível.',
+    invalid_network_id = 'Não foi possível sincronizar o veículo.',
+}
+
 function Utils.debug(message, payload)
     if not Config.Debug then return end
     print(('[mri_Qpaintjob] %s'):format(message))
@@ -32,7 +41,7 @@ function Utils.distance(a, b)
 end
 
 function Utils.getBooth(boothId)
-    local booth = Config.Locations and Config.Locations[boothId]
+    local booth = Config.Locations and Config.Locations[tonumber(boothId)]
     if not booth or not booth.control or not booth.vehicle then
         return nil
     end
@@ -52,6 +61,10 @@ end
 function Utils.getVehicleRadius(booth)
     booth = booth or {}
     return booth.radius and booth.radius.vehicle or Config.DefaultVehicleRadius
+end
+
+function Utils.getReasonMessage(reason)
+    return reasonMap[reason] or reason or 'Falha desconhecida.'
 end
 
 function Utils.hasJobAccess(booth)
@@ -82,6 +95,15 @@ function Utils.notify(data)
     })
 end
 
+function Utils.playFrontendSound(kind)
+    local soundConfig = Config.UI.Sounds
+    if not soundConfig or not soundConfig.enabled then return end
+
+    local sound = soundConfig[kind]
+    if not sound then return end
+    PlaySoundFrontend(-1, sound.name, sound.set, true)
+end
+
 function Utils.hexToRgb(hex)
     if type(hex) ~= 'string' then return { r = 255, g = 255, b = 255 } end
     local sanitized = hex:gsub('#', '')
@@ -98,6 +120,10 @@ function Utils.rgbToHex(rgb)
     local g = math.min(255, math.max(0, math.floor((rgb.g or 255) + 0.5)))
     local b = math.min(255, math.max(0, math.floor((rgb.b or 255) + 0.5)))
     return ('#%02X%02X%02X'):format(r, g, b)
+end
+
+function Utils.rgbSwatch(rgb)
+    return ('RGB %s / %s / %s'):format(rgb.r or 0, rgb.g or 0, rgb.b or 0)
 end
 
 function Utils.isValidVehicle(vehicle)
@@ -146,6 +172,21 @@ function Utils.getVehicleDisplayName(vehicle)
     return ('%s • %s'):format(label, plate)
 end
 
+local function vehicleCandidatesFromPlayer(ped)
+    local candidates = {}
+    local currentVehicle = GetVehiclePedIsIn(ped, false)
+    if Utils.isValidVehicle(currentVehicle) then
+        candidates[#candidates + 1] = currentVehicle
+    end
+
+    local lastVehicle = GetVehiclePedIsIn(ped, true)
+    if Utils.isValidVehicle(lastVehicle) and lastVehicle ~= currentVehicle then
+        candidates[#candidates + 1] = lastVehicle
+    end
+
+    return candidates
+end
+
 function Utils.findVehicleInBooth(boothId)
     local booth = Utils.getBooth(boothId)
     if not booth then return nil, 'invalid_booth' end
@@ -154,6 +195,14 @@ function Utils.findVehicleInBooth(boothId)
     if not vehicleCoords then return nil, 'invalid_vehicle_coords' end
 
     local radius = Utils.getVehicleRadius(booth)
+    local ped = cache.ped
+
+    for _, vehicle in ipairs(vehicleCandidatesFromPlayer(ped)) do
+        if Utils.distance(GetEntityCoords(vehicle), vehicleCoords) <= radius then
+            return vehicle
+        end
+    end
+
     local vehicle = GetClosestVehicle(vehicleCoords.x, vehicleCoords.y, vehicleCoords.z, radius + 1.5, 0, 71)
     if not Utils.isValidVehicle(vehicle) then
         return nil, 'vehicle_not_found'
@@ -172,9 +221,7 @@ function Utils.getVehiclePaintState(vehicle)
 
     local primaryType, primaryColor, pearl = GetVehicleModColor_1(vehicle)
     local secondaryType, secondaryColor = GetVehicleModColor_2(vehicle)
-    local wheelColor
     local _, currentWheelColor = GetVehicleExtraColours(vehicle)
-    wheelColor = currentWheelColor
 
     local pr, pg, pb = GetVehicleCustomPrimaryColour(vehicle)
     local sr, sg, sb = GetVehicleCustomSecondaryColour(vehicle)
@@ -186,13 +233,25 @@ function Utils.getVehiclePaintState(vehicle)
         primaryColorIndex = tonumber(primaryColor) or 0,
         secondaryColorIndex = tonumber(secondaryColor) or 0,
         pearlescentColor = tonumber(pearl) or 0,
-        wheelColor = tonumber(wheelColor) or 0,
+        wheelColor = tonumber(currentWheelColor) or 0,
         secondaryFinish = tonumber(secondaryType) or tonumber(primaryType) or 0,
     }
 end
 
 function Utils.getFinishByValue(value)
     return finishByValue[tonumber(value) or 0] or finishByValue[0]
+end
+
+function Utils.getFinishOptions()
+    local options = {}
+    for _, finish in ipairs(Config.FinishTypes or {}) do
+        options[#options + 1] = {
+            value = finish.value,
+            label = finish.label,
+            description = finish.description,
+        }
+    end
+    return options
 end
 
 function Utils.applyPaintState(vehicle, state)

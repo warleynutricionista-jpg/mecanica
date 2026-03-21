@@ -101,11 +101,24 @@ local function getBoothState(boothId)
     return state
 end
 
+local function touchBooth(boothId)
+    local state = BusyBooths[boothId]
+    if not state then return end
+    state.updatedAt = os.time()
+    BusyBooths[boothId] = state
+end
+
 lib.callback.register('mri_Qpaintjob:server:beginSession', function(source, boothId, vehicleNetId)
     boothId = tonumber(boothId)
+    vehicleNetId = tonumber(vehicleNetId) or 0
+
     local booth = getBooth(boothId)
     if not booth then
         return false, { message = 'Cabine inválida.' }
+    end
+
+    if vehicleNetId <= 0 then
+        return false, { message = 'NetID do veículo inválido.' }
     end
 
     if not hasJobAccess(source, booth) then
@@ -121,7 +134,7 @@ lib.callback.register('mri_Qpaintjob:server:beginSession', function(source, boot
     BusyBooths[boothId] = {
         source = source,
         token = token,
-        vehicleNetId = tonumber(vehicleNetId) or 0,
+        vehicleNetId = vehicleNetId,
         status = 'reserved',
         updatedAt = os.time(),
     }
@@ -144,6 +157,8 @@ end)
 
 lib.callback.register('mri_Qpaintjob:server:startPaint', function(source, boothId, token, vehicleNetId, selection)
     boothId = tonumber(boothId)
+    vehicleNetId = tonumber(vehicleNetId) or 0
+
     local booth = getBooth(boothId)
     local state = getBoothState(boothId)
 
@@ -151,19 +166,39 @@ lib.callback.register('mri_Qpaintjob:server:startPaint', function(source, boothI
         return false, { message = 'A cabine não está mais disponível.' }
     end
 
+    if not hasJobAccess(source, booth) then
+        return false, { message = 'Seu job perdeu acesso a esta cabine.' }
+    end
+
     if state.source ~= source or state.token ~= token then
         return false, { message = 'Sessão de pintura inválida.' }
     end
 
+    if vehicleNetId <= 0 then
+        return false, { message = 'NetID do veículo inválido.' }
+    end
+
     state.status = 'painting'
     state.updatedAt = os.time()
-    state.vehicleNetId = tonumber(vehicleNetId) or state.vehicleNetId
+    state.vehicleNetId = vehicleNetId
+    state.selection = selection
     BusyBooths[boothId] = state
 
     TriggerClientEvent('mri_Qpaintjob:client:playEffects', -1, boothId, state.vehicleNetId, selection and selection.primary or nil)
     debug('Pintura iniciada', { boothId = boothId, source = source, vehicleNetId = state.vehicleNetId })
 
     return true, { ok = true }
+end)
+
+RegisterNetEvent('mri_Qpaintjob:server:touchSession', function(boothId, token)
+    local source = source
+    boothId = tonumber(boothId)
+
+    local state = getBoothState(boothId)
+    if not state then return end
+    if state.source ~= source or state.token ~= token then return end
+
+    touchBooth(boothId)
 end)
 
 RegisterNetEvent('mri_Qpaintjob:server:finishPaint', function(boothId, token, completed)
@@ -200,6 +235,7 @@ AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= ResourceName then return end
     detectFramework()
     for boothId in pairs(Config.Locations or {}) do
+        BusyBooths[boothId] = nil
         notifyBusyState(boothId, false)
     end
 end)

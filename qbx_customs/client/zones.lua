@@ -1,7 +1,7 @@
 local zoneId
 local allowAccess = false
 local sharedConfig = require 'config.shared'
-local openCustoms = require('client.menus.main')
+local openCustoms = require('client.main')
 
 local function checkAccess()
     while not cache.vehicle do
@@ -80,6 +80,11 @@ CreateThread(function()
                         })
                     end
                     if IsControlJustPressed(0, 38) then
+                        if GetPedInVehicleSeat(cache.vehicle, -1) ~= cache.ped then
+                            exports.qbx_core:Notify(locale('notifications.error.driverSeat'), 'error')
+                            return
+                        end
+
                         SetEntityVelocity(cache.vehicle, 0.0, 0.0, 0.0)
                         lib.hideTextUI()
                         openCustoms()

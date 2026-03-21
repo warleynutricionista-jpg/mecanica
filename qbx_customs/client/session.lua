@@ -1,86 +1,75 @@
 local defaults = {
     isOpen = false,
     isClosing = false,
+    zoneId = nil,
+    zoneIndex = nil,
     vehicle = 0,
+    vehicleNetId = 0,
+    plate = nil,
+    preview = nil,
     committedProps = nil,
     originalProps = nil,
     sessionTotal = 0,
-    selectedCategory = nil,
-    selectedOption = nil,
-    selectedChoice = nil,
-    previewOption = nil,
-    previewChoice = nil,
-    vehicleNetId = 0,
-    previewState = nil,
-    lastAppliedState = nil,
-    isPreviewActive = false,
+    selections = {
+        category = nil,
+        option = nil,
+        choice = nil,
+    },
 }
 
 local session = table.clone(defaults)
 
 local function resetSelections()
-    session.selectedCategory = nil
-    session.selectedOption = nil
-    session.selectedChoice = nil
-    session.previewOption = nil
-    session.previewChoice = nil
+    session.selections = {
+        category = nil,
+        option = nil,
+        choice = nil,
+    }
 end
 
-function session.begin(vehicle)
+function session.start(data)
     session.isOpen = true
     session.isClosing = false
-    session.vehicle = vehicle or 0
-    session.vehicleNetId = vehicle and vehicle ~= 0 and NetworkGetNetworkIdFromEntity(vehicle) or 0
+    session.zoneId = data.zoneId
+    session.zoneIndex = data.zoneIndex
+    session.vehicle = data.vehicle or 0
+    session.vehicleNetId = data.vehicleNetId or 0
+    session.plate = data.plate
+    session.preview = nil
     session.committedProps = nil
     session.originalProps = nil
     session.sessionTotal = 0
-    session.previewState = nil
-    session.lastAppliedState = nil
-    session.isPreviewActive = false
     resetSelections()
 end
 
-function session.clearPreview()
-    session.previewOption = nil
-    session.previewChoice = nil
-    session.previewState = nil
-    session.isPreviewActive = false
-end
-
-function session.setPreview(optionId, choiceId)
-    session.previewOption = optionId
-    session.previewChoice = choiceId
-    session.previewState = {
-        optionId = optionId,
-        choiceId = choiceId,
-    }
-    session.isPreviewActive = true
-end
-
-function session.setLastAppliedState(props)
-    session.lastAppliedState = props and table.clone(props) or nil
-end
-
-function session.select(categoryId, optionId, choiceId)
+function session.setSelection(categoryId, optionId, choiceId)
     if categoryId ~= nil then
-        session.selectedCategory = categoryId
+        session.selections.category = categoryId
     end
 
     if optionId ~= nil then
-        session.selectedOption = optionId
+        session.selections.option = optionId
     end
 
     if choiceId ~= nil then
-        session.selectedChoice = choiceId
+        session.selections.choice = choiceId
     end
+end
+
+function session.setPreview(preview)
+    session.preview = preview and table.clone(preview) or nil
+end
+
+function session.clearPreview()
+    session.preview = nil
+end
+
+function session.addToTotal(amount)
+    session.sessionTotal = session.sessionTotal + math.max(0, math.floor(tonumber(amount) or 0))
 end
 
 function session.markClosing()
     session.isClosing = true
-end
-
-function session.addToTotal(amount)
-    session.sessionTotal += amount or 0
 end
 
 function session.reset()

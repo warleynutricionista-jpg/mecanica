@@ -1,4 +1,4 @@
-local pricing = require 'shared.pricing'
+local sharedConfig = require 'config.shared'
 
 local billing = {}
 
@@ -6,48 +6,51 @@ local function getPlayer(source)
     return exports.qbx_core:GetPlayer(source)
 end
 
-local function notifyPaid(source, amount)
-    exports.qbx_core:Notify(source, locale('notifications.success.paid', amount), 'success')
+function billing.charge(source, amount)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
+    if amount <= 0 then
+        return true, nil
+    end
+
+    local player = getPlayer(source)
+    if not player or not player.Functions then
+        return false, 'playerMissing'
+    end
+
+    for i = 1, #sharedConfig.billing.accountOrder do
+        local account = sharedConfig.billing.accountOrder[i]
+        local balance = player.Functions.GetMoney(account)
+        if balance and balance >= amount then
+            player.Functions.RemoveMoney(account, amount, locale('general.payReason'))
+            return true, account
+        end
+    end
+
+    return false, 'money'
 end
 
-function billing.removeMoney(source, amount)
-    amount = math.max(math.floor(tonumber(amount) or 0), 0)
+function billing.refund(source, amount, account)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
     if amount <= 0 then
         return true
     end
 
     local player = getPlayer(source)
-    if not player then
+    if not player or not player.Functions then
         return false
     end
 
-    local cashBalance = player.Functions.GetMoney('cash')
-    if cashBalance >= amount then
-        player.Functions.RemoveMoney('cash', amount, locale('general.payReason'))
-        notifyPaid(source, amount)
-        return true
-    end
-
-    local bankBalance = player.Functions.GetMoney('bank')
-    if bankBalance >= amount then
-        player.Functions.RemoveMoney('bank', amount, locale('general.payReason'))
-        notifyPaid(source, amount)
-        return true
-    end
-
-    return false
+    player.Functions.AddMoney(account or sharedConfig.billing.refundAccountFallback or 'bank', amount, locale('general.refundReason'))
+    return true
 end
 
-function billing.chargeForMod(source, mod, level)
-    if not pricing.isSupportedMod(mod) then
-        return false
+function billing.notifySuccess(source, amount, account)
+    if amount <= 0 then
+        return
     end
 
-    return billing.removeMoney(source, pricing.get(mod, level))
-end
-
-function billing.chargeForRepair(source, bodyHealth)
-    return billing.removeMoney(source, pricing.getRepairPrice(bodyHealth))
+    local accountLabel = account == 'cash' and locale('notifications.success.cashAccount') or locale('notifications.success.bankAccount')
+    exports.qbx_core:Notify(source, locale('notifications.success.paid', amount, accountLabel), 'success')
 end
 
 return billing

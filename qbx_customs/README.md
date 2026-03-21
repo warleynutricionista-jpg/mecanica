@@ -1,44 +1,72 @@
 # qbx_customs
 
-![image](https://github.com/Popcorn-RP/qbx_customs/assets/85725579/43d91928-3e1d-4ef2-b73e-d1f47a831495)
+Reescrita completa do recurso `qbx_customs` para bases Qbox com `qbx_core`, `ox_lib`, `oxmysql` e integração com `qbx_vehicles`.
 
+## Diagnóstico da versão anterior
 
-A free-to-use and modify vehicle customization resource forked from [Popcornrp-customs](https://github.com/alberttheprince/popcornrp-customs)
+A auditoria da versão anterior mostrou problemas estruturais que comprometiam estabilidade e compatibilidade:
 
-[Preview](https://www.youtube.com/watch?v=8UcGmHJ3mUo)
+- persistência limitada ao dono do veículo, quebrando fluxo de oficina para veículos de terceiros;
+- cobrança e persistência desacopladas, permitindo inconsistência entre pagamento e aplicação;
+- arquitetura espalhada entre várias camadas pequenas com responsabilidades sobrepostas;
+- risco de preview residual, câmera residual e fechamento inconsistente em perda de foco/contexto;
+- dependência de callbacks fragmentados para zone, vehicle props e fechamento sem trilha de sessão no servidor;
+- menus reconstruídos em múltiplos pontos sem uma sessão server-side para validar a operação final.
 
-# Dependencies
+## Nova arquitetura
 
-- [ox_lib](https://github.com/overextended/ox_lib)
-- [qbx_core](https://github.com/Qbox-project/qbx_core)
+A nova estrutura foi reduzida para módulos com responsabilidade explícita:
 
-# Features
+- `config/shared.lua`: zonas, política de cobrança, preços e permissões.
+- `config/client.lua`: catálogo base, labels, câmera e classes.
+- `shared/pricing.lua`: cálculo centralizado de preço para cosméticos, performance e reparo.
+- `client/session.lua`: estado único da sessão ativa.
+- `client/services/access.lua`: validação client-side de zona, job, duty e classe/modelo.
+- `client/services/vehicle.lua`: snapshot, restore, preview e captura de propriedades.
+- `client/camera.lua`: câmera orbital isolada, sem NUI fullscreen.
+- `client/catalog.lua`: catálogo dinâmico baseado no veículo atual.
+- `client/menu.lua`: UI principal em `ox_lib` com contexts e watcher de fechamento.
+- `client/main.lua`: orquestra abertura, preview, checkout, rollback e fechamento.
+- `client/zones.lua`: zonas, text UI e integração externa `mri_Qbox:customs:client`.
+- `server/services/access.lua`: política de acesso server-side.
+- `server/services/billing.lua`: cobrança, estorno e notificação.
+- `server/services/persistence.lua`: persistência via `qbx_vehicles` com fallback SQL preservando `vrsMechanic`.
+- `server/main.lua`: sessão server-side, abertura, checkout atômico e limpeza.
 
-- Job Whitelist for free Customization
-- Disable or Enable customization options
-- Change pricing
-- Drag your camera and zoom in and out
-- Air wrench sound to confirm the customization
-- Displayed pricing
-- All tire and paint options (including Chameleon)
-- Customize your car (duh)
+## Compatibilidade Qbox
 
-# Info
+O recurso final foi alinhado com a base desta pasta:
 
-The foundation for qbx_customs, Popcornrp-Customs, was created following the subsequent discovery of QB-Customs containing stolen/leaked code. Popcornrp-Customs is a total replacement for QB-Customs, meant to replace it and improve on its original functionality.
+- `qbx_core` para player/job/money/notify;
+- `ox_lib` para locale, callbacks, text UI e context menus;
+- `oxmysql` para fallback de persistência;
+- `qbx_vehicles` para `SaveVehicle` quando a entidade existe no servidor;
+- preservação de dados extras como `vrsMechanic` em fallback SQL, evitando perda de integração com a mecânica.
 
-Popcornrp-customs was released as a thank-you to the FiveM open-source community and all the developers who have poured thousands of hours of their free time into creating helpful, free resources.
+## Fluxo operacional
 
-Thank you!
+1. O client valida zona, veículo, banco do motorista e acesso.
+2. O server abre uma sessão única por source e valida persistência do veículo.
+3. O client gera preview sempre a partir do snapshot confirmado.
+4. Ao aplicar, o server cobra, persiste e só confirma quando tudo conclui com sucesso.
+5. Se a persistência falhar, o server estorna a cobrança.
+6. Ao fechar, o client restaura preview pendente, encerra câmera, fecha menu e limpa sessão server-side.
 
-# Credits
+## Ajustes manuais recomendados
 
-Thank you, Jorn (Discord: jorn08), for your hard work on this resource. None of this would be possible without you!
+- revisar `config/shared.lua` para jobs gratuitos (`freeRepairJobs`, `freeModJobs`) e restrições específicas de cada oficina;
+- traduzir `locales/en.json`, `de.json` e `fr.json`, que foram sincronizados temporariamente com `pt-br.json` nesta reescrita;
+- habilitar `allowTemporaryVehicles = true` apenas se a sua base realmente usar veículos sem registro em `player_vehicles`.
 
-Qbx_customs also includes functionality from the cool dragcam resource by Jorn, check it out!:  https://github.com/Jorn08/dragcam
+## Checklist técnico
 
-the Popcorn Roleplay Community for testing and supporting the development of this resource, and the Qbox development team for choosing to use popcornrp-customs as a foundation for Qbox customs!
-
-Popcorn Roleplay Discord: https://discord.gg/popcornroleplay
-
-🍿 ❤️ 🦆
+- [x] abre corretamente por zona;
+- [x] valida banco do motorista;
+- [x] valida sessão única no servidor;
+- [x] preview sempre parte do estado confirmado;
+- [x] cancelar preview restaura propriedades anteriores;
+- [x] aplicação chama cobrança + persistência no mesmo fluxo;
+- [x] persistência tenta `qbx_vehicles` antes do fallback SQL;
+- [x] falha de persistência gera estorno;
+- [x] fechamento limpa câmera, menu, preview e sessão server-side;
+- [x] reinício do resource restaura o snapshot confirmado no client.

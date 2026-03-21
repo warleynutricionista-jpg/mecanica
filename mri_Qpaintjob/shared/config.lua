@@ -12,6 +12,7 @@ Config.Debug = false
 
 Config.UI = {
     Title = 'Cabine de Pintura',
+    Subtitle = 'Estação premium de acabamento automotivo',
     Icon = 'spray-can-sparkles',
     Position = 'top-right',
     PreviewEnabledByDefault = true,

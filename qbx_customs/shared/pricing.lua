@@ -1,7 +1,8 @@
 local sharedConfig = require 'config.shared'
 
 local pricing = {}
-local validPriceKeys = {
+
+local supported = {
     cosmetic = true,
     repair = true,
     [11] = true,
@@ -12,37 +13,47 @@ local validPriceKeys = {
     [18] = true,
 }
 
----@param mod 'cosmetic' | 'repair' | integer
----@param level? integer
----@return number
-function pricing.get(mod, level)
-    if not validPriceKeys[mod] then
+local function normalizeLevel(level)
+    local numericLevel = math.floor(tonumber(level) or 1)
+    if numericLevel < 1 then
+        return 1
+    end
+
+    return numericLevel
+end
+
+function pricing.isSupported(key)
+    return supported[key] == true
+end
+
+function pricing.get(key, level, context)
+    if not pricing.isSupported(key) then
         return 0
     end
 
-    if mod == 'repair' then
-        return 0
+    if key == 'repair' then
+        local bodyHealth = context and context.bodyHealth or 1000.0
+        local repairConfig = sharedConfig.prices.repair
+        local missing = math.max(0, 1000.0 - math.max(tonumber(bodyHealth) or 0.0, 0.0))
+        local amount = math.ceil(missing * (repairConfig.multiplier or 1.0))
+        amount = math.max(repairConfig.minimum or 0, amount)
+        if repairConfig.maximum then
+            amount = math.min(repairConfig.maximum, amount)
+        end
+        if missing <= 0 then
+            return 0
+        end
+
+        return amount
     end
 
-    local price = sharedConfig.prices[mod]
+    local price = sharedConfig.prices[key]
     if type(price) == 'table' then
-        local normalizedLevel = math.max(level or #price, 1)
-        return price[normalizedLevel] or price[#price] or 0
+        local index = normalizeLevel(level)
+        return price[index] or price[#price] or 0
     end
 
-    return price or 0
-end
-
----@param mod any
----@return boolean
-function pricing.isSupportedMod(mod)
-    return validPriceKeys[mod] == true
-end
-
----@param bodyHealth number
----@return number
-function pricing.getRepairPrice(bodyHealth)
-    return math.max(0, math.ceil(1000 - math.max(bodyHealth or 0, 0)))
+    return tonumber(price) or 0
 end
 
 return pricing

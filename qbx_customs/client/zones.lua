@@ -1,126 +1,93 @@
-local zoneId
-local allowAccess = false
-local textUiVisible = false
-
 local sharedConfig = require 'config.shared'
-local constants = require 'client.constants'
-local session = require 'client.session'
+local clientConfig = require 'config.client'
 local access = require 'client.services.access'
+local session = require 'client.session'
+local feedback = require 'client.services.feedback'
 local openCustoms = require 'client.main'
 
-local function setTextUiVisible(visible)
-    if visible == textUiVisible then
+local currentZoneIndex = nil
+local textUiVisible = false
+
+local function setTextUiVisible(state)
+    if textUiVisible == state then
         return
     end
 
-    textUiVisible = visible
-
-    if visible then
+    textUiVisible = state
+    if state then
         lib.showTextUI(locale('textUI.tune'), {
-            icon = 'fa-solid fa-car',
-            position = 'right-center',
+            icon = 'car',
+            position = sharedConfig.textUiPosition,
         })
-        return
+    else
+        lib.hideTextUI()
     end
-
-    lib.hideTextUI()
 end
 
-local function refreshAccess(vehicle)
-    allowAccess = access.isVehicleAllowed(zoneId, vehicle)
-    setTextUiVisible(vehicle and allowAccess and not session.isOpen)
+local function refreshPrompt()
+    local vehicle = cache.vehicle
+    local show = currentZoneIndex ~= nil and vehicle ~= nil and not session.isOpen and access.isVehicleAllowed(currentZoneIndex, vehicle)
+    setTextUiVisible(show)
 end
 
----@param vertices vector3[]
----@return vector3
-local function calculatePolyzoneCenter(vertices)
-    local xSum = 0
-    local ySum = 0
-    local zSum = 0
-
-    for i = 1, #vertices do
-        xSum += vertices[i].x
-        ySum += vertices[i].y
-        zSum += vertices[i].z
+local function calculateCenter(points)
+    local x, y, z = 0.0, 0.0, 0.0
+    for i = 1, #points do
+        x = x + points[i].x
+        y = y + points[i].y
+        z = z + points[i].z
     end
 
-    return vec3(xSum / #vertices, ySum / #vertices, zSum / #vertices)
-end
-
-local function tryOpenCustoms()
-    if session.isOpen or session.isClosing then
-        exports.qbx_core:Notify(locale('notifications.error.busy'), 'error')
-        return false
-    end
-
-    if not cache.vehicle or not allowAccess then
-        return false
-    end
-
-    if GetPedInVehicleSeat(cache.vehicle, -1) ~= cache.ped then
-        exports.qbx_core:Notify(locale('notifications.error.driverSeat'), 'error')
-        return false
-    end
-
-    SetEntityVelocity(cache.vehicle, 0.0, 0.0, 0.0)
-    setTextUiVisible(false)
-    return openCustoms()
+    return vec3(x / #points, y / #points, z / #points)
 end
 
 CreateThread(function()
-    for _, zone in ipairs(sharedConfig.zones) do
+    for index = 1, #sharedConfig.zones do
+        local zone = sharedConfig.zones[index]
         lib.zones.poly({
-            debug = sharedConfig.debug,
             points = zone.points,
-            onEnter = function(state)
-                zoneId = state.id
-                refreshAccess(cache.vehicle)
+            debug = sharedConfig.debug,
+            onEnter = function()
+                currentZoneIndex = index
+                refreshPrompt()
             end,
             onExit = function()
-                zoneId = nil
-                allowAccess = false
+                if currentZoneIndex == index then
+                    currentZoneIndex = nil
+                end
                 setTextUiVisible(false)
             end,
             inside = function()
-                if not cache.vehicle or not allowAccess or session.isOpen then
-                    if textUiVisible and session.isOpen then
-                        setTextUiVisible(false)
-                    end
-                    return
-                end
-
-                setTextUiVisible(true)
-
-                if IsControlJustPressed(0, constants.controls.openMenu) then
-                    tryOpenCustoms()
+                refreshPrompt()
+                if textUiVisible and IsControlJustPressed(0, clientConfig.controls.openMenu) then
+                    openCustoms(index)
                 end
             end,
         })
 
         if not zone.hideBlip then
-            local center = calculatePolyzoneCenter(zone.points)
+            local center = calculateCenter(zone.points)
             local blip = AddBlipForCoord(center.x, center.y, center.z)
-            SetBlipSprite(blip, zone.blip.sprite or 72)
-            SetBlipColour(blip, zone.blip.color or 4)
-            SetBlipScale(blip, zone.blip.scale or 0.8)
+            SetBlipSprite(blip, 72)
+            SetBlipColour(blip, 4)
+            SetBlipScale(blip, 0.8)
             SetBlipAsShortRange(blip, true)
             BeginTextCommandSetBlipName('STRING')
-            AddTextComponentSubstringPlayerName(zone.blip.label or 'Customs')
+            AddTextComponentSubstringPlayerName(zone.label or 'Customs')
             EndTextCommandSetBlipName(blip)
         end
     end
 end)
 
-lib.callback.register('qbx_customs:client:zone', function()
-    return zoneId
-end)
-
-lib.onCache('vehicle', function(vehicle)
-    if not zoneId then return end
-    refreshAccess(vehicle)
+lib.onCache('vehicle', function()
+    refreshPrompt()
 end)
 
 lib.callback.register('mri_Qbox:customs:client', function()
-    setTextUiVisible(false)
-    return tryOpenCustoms()
+    if not currentZoneIndex then
+        feedback.notify(locale('notifications.error.noZone'), 'error')
+        return false
+    end
+
+    return openCustoms(currentZoneIndex)
 end)

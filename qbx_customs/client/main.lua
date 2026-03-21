@@ -9,23 +9,37 @@ local feedback = require 'client.services.feedback'
 local startDragCam = dragcam.startDragCam
 local stopDragCam = dragcam.stopDragCam
 
-local function disableControls()
+local DISABLED_CONTROLS = { 71, 72, 75, 85, 106 }
+local sessionGuardRunning = false
+
+local function disableControlsLoop()
     CreateThread(function()
         while session.isOpen do
             Wait(0)
-            DisableControlAction(0, 71, true)
-            DisableControlAction(0, 72, true)
-            DisableControlAction(0, 75, true)
-            DisableControlAction(0, 85, true)
-            DisableControlAction(0, 106, true)
+
+            for i = 1, #DISABLED_CONTROLS do
+                DisableControlAction(0, DISABLED_CONTROLS[i], true)
+            end
         end
     end)
 end
 
-local function closeMenu(saveVehicle)
-    if not session.isOpen or session.isClosing then return end
+local function notifyCloseReason(reason)
+    if reason == 'driverSeat' then
+        feedback.notify(locale('notifications.error.driverSeat'), 'error')
+    elseif reason == 'leftVehicle' or reason == 'invalidVehicle' or reason == 'destroyedVehicle' then
+        feedback.notify(locale('notifications.error.invalidVehicle'), 'error')
+    elseif reason == 'busy' then
+        feedback.notify(locale('notifications.error.busy'), 'error')
+    end
+end
 
-    session.isClosing = true
+local function closeMenu(saveVehicle, reason)
+    if not session.isOpen or session.isClosing then
+        return false
+    end
+
+    session.markClosing()
     actions.restoreCommitted()
     stopDragCam()
     ui.hide()
@@ -35,6 +49,12 @@ local function closeMenu(saveVehicle)
     end
 
     session.reset()
+
+    if reason then
+        notifyCloseReason(reason)
+    end
+
+    return true
 end
 
 local function ensureSessionOrClose(saveVehicle)
@@ -43,20 +63,42 @@ local function ensureSessionOrClose(saveVehicle)
         return true
     end
 
-    if reason == 'driverSeat' then
-        feedback.notify(locale('notifications.error.driverSeat'), 'error')
-    elseif reason == 'leftVehicle' or reason == 'invalidVehicle' or reason == 'destroyedVehicle' then
-        feedback.notify(locale('notifications.error.invalidVehicle'), 'error')
+    closeMenu(saveVehicle, reason)
+    return false
+end
+
+local function startSessionGuard()
+    if sessionGuardRunning then
+        return
     end
 
-    closeMenu(saveVehicle)
-    return false
+    sessionGuardRunning = true
+
+    CreateThread(function()
+        while session.isOpen do
+            Wait(250)
+
+            local ok, reason = validator.ensureActiveSession()
+            if not ok then
+                closeMenu(reason ~= 'leftVehicle' and reason ~= 'invalidVehicle' and reason ~= 'destroyedVehicle', reason)
+                break
+            end
+
+            if IsPauseMenuActive() then
+                closeMenu(true)
+                break
+            end
+        end
+
+        sessionGuardRunning = false
+    end)
 end
 
 RegisterNUICallback('selectCategory', function(data, cb)
     if ensureSessionOrClose(true) then
         ui.selectCategory(data.categoryId)
     end
+
     cb(1)
 end)
 
@@ -64,6 +106,7 @@ RegisterNUICallback('selectOption', function(data, cb)
     if ensureSessionOrClose(true) then
         ui.selectOption(data.optionId)
     end
+
     cb(1)
 end)
 
@@ -71,6 +114,7 @@ RegisterNUICallback('previewChoice', function(data, cb)
     if ensureSessionOrClose(false) then
         ui.previewChoice(data.optionId, data.choiceId)
     end
+
     cb(1)
 end)
 
@@ -78,6 +122,7 @@ RegisterNUICallback('installChoice', function(data, cb)
     if ensureSessionOrClose(true) then
         ui.installChoice(data.optionId, data.choiceId)
     end
+
     cb(1)
 end)
 
@@ -86,22 +131,27 @@ RegisterNUICallback('close', function(_, cb)
     cb(1)
 end)
 
+
 RegisterNUICallback('restorePreview', function(_, cb)
     if ensureSessionOrClose(false) then
         actions.restoreCommitted()
         ui.refresh()
     end
+
     cb(1)
 end)
 
 lib.callback.register('qbx_customs:client:vehicleProps', function()
-    if not ensureSessionOrClose(false) then return nil end
+    if not ensureSessionOrClose(false) then
+        return nil
+    end
+
     return lib.getVehicleProperties(session.vehicle)
 end)
 
 lib.onCache('vehicle', function(vehicleEntity)
     if session.isOpen and not vehicleEntity then
-        closeMenu(true)
+        closeMenu(false, 'leftVehicle')
     end
 end)
 
@@ -119,16 +169,16 @@ return function()
     local currentVehicle = cache.vehicle
     local canOpen, reason = validator.canOpenCustoms(currentVehicle)
     if not canOpen then
-        if reason == 'destroyedVehicle' or reason == 'invalidVehicle' then
-            feedback.notify(locale('notifications.error.invalidVehicle'), 'error')
-        end
-        return
+        notifyCloseReason(reason)
+        return false
     end
 
-    session.isOpen = true
+    session.begin(currentVehicle)
     vehicle.set(currentVehicle)
     actions.captureCommittedProps()
-    disableControls()
+    disableControlsLoop()
+    startSessionGuard()
     startDragCam(currentVehicle)
     ui.open()
+    return true
 end

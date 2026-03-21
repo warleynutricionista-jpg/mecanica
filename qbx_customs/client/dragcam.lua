@@ -1,14 +1,19 @@
-local angleY = 0.0
-local angleZ = 0.0
-local cam
-local running = false
-local targetEntity
-local radius = 5.0
-local radiusMax = 10.0
-local radiusMin = 2.5
-local scaleform
-local scrollIncrement = 0.5
-local isFirstPersonView = false
+local cameraState = {
+    angleY = 0.0,
+    angleZ = 0.0,
+    cam = nil,
+    running = false,
+    scaleform = nil,
+    targetEntity = nil,
+    radius = 5.0,
+    radiusMin = 2.5,
+    radiusMax = 10.0,
+    scrollIncrement = 0.5,
+    isFirstPersonView = false,
+}
+
+local PLAYER_CONTROL_BLOCKS = { 21, 24, 25, 30, 31, 36, 47, 58, 69, 75, 140, 141, 142, 143, 257, 263, 264 }
+local CAMERA_CONTROL_BLOCKS = { 1, 2, 3, 4, 5, 6, 12, 13, 200 }
 
 local function cos(degrees)
     return math.cos(math.rad(degrees))
@@ -18,56 +23,37 @@ local function sin(degrees)
     return math.sin(math.rad(degrees))
 end
 
-local function setCamPosition()
-    if not running or not targetEntity or not DoesEntityExist(targetEntity) then return end
+local function disableControls(controlList)
+    for i = 1, #controlList do
+        DisableControlAction(0, controlList[i], true)
+    end
+end
 
-    local entityCoords = GetEntityCoords(targetEntity)
+local function isTargetValid()
+    return cameraState.running and cameraState.targetEntity and DoesEntityExist(cameraState.targetEntity)
+end
+
+local function setCamPosition()
+    if not isTargetValid() or not cameraState.cam then
+        return false
+    end
+
+    local entityCoords = GetEntityCoords(cameraState.targetEntity)
     local mouseX = GetDisabledControlNormal(0, 1) * 8.0
     local mouseY = GetDisabledControlNormal(0, 2) * 8.0
 
-    angleZ -= mouseX
-    angleY = lib.math.clamp(angleY + mouseY, 0.0, 89.0)
+    cameraState.angleZ -= mouseX
+    cameraState.angleY = lib.math.clamp(cameraState.angleY + mouseY, 0.0, 89.0)
 
     local offset = vec3(
-        cos(angleZ) * cos(angleY) * radius,
-        sin(angleZ) * cos(angleY) * radius,
-        sin(angleY) * radius
+        cos(cameraState.angleZ) * cos(cameraState.angleY) * cameraState.radius,
+        sin(cameraState.angleZ) * cos(cameraState.angleY) * cameraState.radius,
+        sin(cameraState.angleY) * cameraState.radius
     )
 
-    SetCamCoord(cam, entityCoords.x + offset.x, entityCoords.y + offset.y, entityCoords.z + offset.z)
-    PointCamAtCoord(cam, entityCoords.x, entityCoords.y, entityCoords.z + 0.5)
-end
-
-local function disablePlayerMovement()
-    DisableControlAction(0, 21, true)
-    DisableControlAction(0, 24, true)
-    DisableControlAction(0, 25, true)
-    DisableControlAction(0, 30, true)
-    DisableControlAction(0, 31, true)
-    DisableControlAction(0, 36, true)
-    DisableControlAction(0, 47, true)
-    DisableControlAction(0, 58, true)
-    DisableControlAction(0, 69, true)
-    DisableControlAction(0, 75, true)
-    DisableControlAction(0, 140, true)
-    DisableControlAction(0, 141, true)
-    DisableControlAction(0, 142, true)
-    DisableControlAction(0, 143, true)
-    DisableControlAction(0, 257, true)
-    DisableControlAction(0, 263, true)
-    DisableControlAction(0, 264, true)
-end
-
-local function disableCamMovement()
-    DisableControlAction(0, 1, true)
-    DisableControlAction(0, 2, true)
-    DisableControlAction(0, 3, true)
-    DisableControlAction(0, 4, true)
-    DisableControlAction(0, 5, true)
-    DisableControlAction(0, 6, true)
-    DisableControlAction(0, 12, true)
-    DisableControlAction(0, 13, true)
-    DisableControlAction(0, 200, true)
+    SetCamCoord(cameraState.cam, entityCoords.x + offset.x, entityCoords.y + offset.y, entityCoords.z + offset.z)
+    PointCamAtCoord(cameraState.cam, entityCoords.x, entityCoords.y, entityCoords.z + 0.5)
+    return true
 end
 
 local function instructionalButton(controlId, text)
@@ -77,14 +63,26 @@ local function instructionalButton(controlId, text)
     EndTextCommandScaleformString()
 end
 
+local function releaseScaleform()
+    if cameraState.scaleform then
+        SetScaleformMovieAsNoLongerNeeded(cameraState.scaleform)
+        cameraState.scaleform = nil
+    end
+end
+
 local function showInstructionalButtons()
     CreateThread(function()
-        scaleform = RequestScaleformMovie('instructional_buttons')
-        while running and not HasScaleformMovieLoaded(scaleform) do
+        local scaleform = RequestScaleformMovie('instructional_buttons')
+        cameraState.scaleform = scaleform
+
+        while cameraState.running and not HasScaleformMovieLoaded(scaleform) do
             Wait(0)
         end
 
-        if not running then return end
+        if not cameraState.running or cameraState.scaleform ~= scaleform then
+            releaseScaleform()
+            return
+        end
 
         BeginScaleformMovieMethod(scaleform, 'CLEAR_ALL')
         EndScaleformMovieMethod()
@@ -119,25 +117,43 @@ local function showInstructionalButtons()
         ScaleformMovieMethodAddParamInt(80)
         EndScaleformMovieMethod()
 
-        while running do
+        while cameraState.running and cameraState.scaleform == scaleform do
             DrawScaleformMovieFullscreen(scaleform, 255, 255, 255, 255, 0)
             Wait(0)
         end
+
+        releaseScaleform()
     end)
 end
 
 local function toggleVehicleDoors()
-    local vehicle = cache.vehicle
-    if not vehicle or vehicle ~= targetEntity then return end
+    if not isTargetValid() then return end
 
-    local doors = GetNumberOfVehicleDoors(vehicle)
-    for i = 0, doors do
-        if GetVehicleDoorAngleRatio(vehicle, i) > 0 then
-            SetVehicleDoorShut(vehicle, i, false)
+    local doors = GetNumberOfVehicleDoors(cameraState.targetEntity) - 1
+    for door = 0, doors do
+        if GetVehicleDoorAngleRatio(cameraState.targetEntity, door) > 0 then
+            SetVehicleDoorShut(cameraState.targetEntity, door, false)
         else
-            SetVehicleDoorOpen(vehicle, i, false, false)
+            SetVehicleDoorOpen(cameraState.targetEntity, door, false, false)
         end
     end
+end
+
+local function stopDragCam()
+    if not cameraState.running then return end
+
+    cameraState.running = false
+    RenderScriptCams(false, true, 0, true, false)
+
+    if cameraState.cam then
+        DestroyCam(cameraState.cam, true)
+        cameraState.cam = nil
+    end
+
+    SetCamViewModeForContext(1, 1)
+    releaseScaleform()
+    cameraState.targetEntity = nil
+    cameraState.isFirstPersonView = false
 end
 
 local function startInputLoop()
@@ -146,13 +162,18 @@ local function startInputLoop()
     CreateThread(function()
         local rotating = false
 
-        while running do
-            DisableControlAction(0, 0, true)
-            disablePlayerMovement()
+        while cameraState.running do
+            if not isTargetValid() then
+                stopDragCam()
+                break
+            end
 
-            if not isFirstPersonView then
+            DisableControlAction(0, 0, true)
+            disableControls(PLAYER_CONTROL_BLOCKS)
+
+            if not cameraState.isFirstPersonView then
                 SetMouseCursorActiveThisFrame()
-                disableCamMovement()
+                disableControls(CAMERA_CONTROL_BLOCKS)
 
                 if IsDisabledControlJustPressed(0, 24) or IsControlJustPressed(0, 24) then
                     rotating = true
@@ -168,10 +189,10 @@ local function startInputLoop()
             end
 
             if IsDisabledControlJustReleased(0, 14) or IsControlJustReleased(0, 14) then
-                radius = math.min(radius + scrollIncrement, radiusMax)
+                cameraState.radius = math.min(cameraState.radius + cameraState.scrollIncrement, cameraState.radiusMax)
                 setCamPosition()
             elseif IsDisabledControlJustReleased(0, 15) or IsControlJustReleased(0, 15) then
-                radius = math.max(radius - scrollIncrement, radiusMin)
+                cameraState.radius = math.max(cameraState.radius - cameraState.scrollIncrement, cameraState.radiusMin)
                 setCamPosition()
             end
 
@@ -180,8 +201,8 @@ local function startInputLoop()
             end
 
             if IsDisabledControlJustPressed(0, 0) then
-                isFirstPersonView = not isFirstPersonView
-                if isFirstPersonView then
+                cameraState.isFirstPersonView = not cameraState.isFirstPersonView
+                if cameraState.isFirstPersonView then
                     SetCamViewModeForContext(1, 4)
                     RenderScriptCams(false, true, 0, true, false)
                 else
@@ -198,47 +219,32 @@ end
 ---@param entity integer
 ---@param radiusOptions? {initial?: number, min?: number, max?: number, scrollIncrements?: number}
 local function startDragCam(entity, radiusOptions)
-    if running then
-        return
+    if cameraState.running then
+        stopDragCam()
     end
 
-    running = true
-    targetEntity = entity
-    radius = radiusOptions?.initial or 5.0
-    radiusMin = radiusOptions?.min or 2.5
-    radiusMax = radiusOptions?.max or 10.0
-    scrollIncrement = radiusOptions?.scrollIncrements or 0.5
-    angleY = 0.0
-    angleZ = 0.0
-    isFirstPersonView = false
-    cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then
+        return false
+    end
+
+    cameraState.running = true
+    cameraState.targetEntity = entity
+    cameraState.radius = radiusOptions?.initial or 5.0
+    cameraState.radiusMin = radiusOptions?.min or 2.5
+    cameraState.radiusMax = radiusOptions?.max or 10.0
+    cameraState.scrollIncrement = radiusOptions?.scrollIncrements or 0.5
+    cameraState.angleY = 0.0
+    cameraState.angleZ = 0.0
+    cameraState.isFirstPersonView = false
+    cameraState.cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+
     RenderScriptCams(true, true, 0, true, false)
     showInstructionalButtons()
     startInputLoop()
-end
-
-local function stopDragCam()
-    if not running then return end
-
-    running = false
-    RenderScriptCams(false, true, 0, true, false)
-
-    if cam then
-        DestroyCam(cam, true)
-        cam = nil
-    end
-
-    SetCamViewModeForContext(1, 1)
-
-    if scaleform then
-        SetScaleformMovieAsNoLongerNeeded(scaleform)
-        scaleform = nil
-    end
-
-    targetEntity = nil
+    return true
 end
 
 return {
     startDragCam = startDragCam,
-    stopDragCam = stopDragCam
+    stopDragCam = stopDragCam,
 }

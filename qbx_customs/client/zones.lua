@@ -1,19 +1,25 @@
 local zoneId
 local allowAccess = false
+local textUiVisible = false
 
 local sharedConfig = require 'config.shared'
 local constants = require 'client.constants'
+local session = require 'client.session'
 local access = require 'client.services.access'
 local openCustoms = require 'client.main'
 
 local function setTextUiVisible(visible)
+    if visible == textUiVisible then
+        return
+    end
+
+    textUiVisible = visible
+
     if visible then
-        if not lib.isTextUIOpen() then
-            lib.showTextUI(locale('textUI.tune'), {
-                icon = 'fa-solid fa-car',
-                position = 'right-center',
-            })
-        end
+        lib.showTextUI(locale('textUI.tune'), {
+            icon = 'fa-solid fa-car',
+            position = 'right-center',
+        })
         return
     end
 
@@ -22,7 +28,7 @@ end
 
 local function refreshAccess(vehicle)
     allowAccess = access.isVehicleAllowed(zoneId, vehicle)
-    setTextUiVisible(vehicle and allowAccess)
+    setTextUiVisible(vehicle and allowAccess and not session.isOpen)
 end
 
 ---@param vertices vector3[]
@@ -42,16 +48,23 @@ local function calculatePolyzoneCenter(vertices)
 end
 
 local function tryOpenCustoms()
-    if not cache.vehicle or not allowAccess then return end
+    if session.isOpen or session.isClosing then
+        exports.qbx_core:Notify(locale('notifications.error.busy'), 'error')
+        return false
+    end
+
+    if not cache.vehicle or not allowAccess then
+        return false
+    end
 
     if GetPedInVehicleSeat(cache.vehicle, -1) ~= cache.ped then
         exports.qbx_core:Notify(locale('notifications.error.driverSeat'), 'error')
-        return
+        return false
     end
 
     SetEntityVelocity(cache.vehicle, 0.0, 0.0, 0.0)
     setTextUiVisible(false)
-    openCustoms()
+    return openCustoms()
 end
 
 CreateThread(function()
@@ -69,7 +82,13 @@ CreateThread(function()
                 setTextUiVisible(false)
             end,
             inside = function()
-                if not cache.vehicle or not allowAccess then return end
+                if not cache.vehicle or not allowAccess or session.isOpen then
+                    if textUiVisible and session.isOpen then
+                        setTextUiVisible(false)
+                    end
+                    return
+                end
+
                 setTextUiVisible(true)
 
                 if IsControlJustPressed(0, constants.controls.openMenu) then
@@ -103,5 +122,5 @@ end)
 
 lib.callback.register('mri_Qbox:customs:client', function()
     setTextUiVisible(false)
-    openCustoms()
+    return tryOpenCustoms()
 end)

@@ -27,6 +27,7 @@ const restoreBtn = document.getElementById('restore-btn');
 const closeBtn = document.getElementById('close-btn');
 
 let state = null;
+let previewRequest = null;
 const iconBasePath = 'assets/renzu-icons';
 
 const formatMoney = (value) => `${state?.currency ?? 'R$'}${Number(value || 0).toLocaleString('pt-BR')}`;
@@ -36,6 +37,17 @@ function post(event, data = {}) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify(data),
+  });
+}
+
+function schedulePreview(choiceId) {
+  if (!state?.currentOption || !choiceId) return;
+  if (previewRequest === choiceId) return;
+
+  previewRequest = choiceId;
+  window.requestAnimationFrame(() => {
+    if (previewRequest !== choiceId || !state?.currentOption) return;
+    post('previewChoice', { optionId: state.currentOption, choiceId });
   });
 }
 
@@ -153,7 +165,7 @@ function renderOptions() {
     head.className = 'item-head';
     head.appendChild(createIcon(option.asset, option.icon));
     head.appendChild(createInfoMain(option.label, `${option.group} · ${option.currentLabel}`));
-    head.appendChild(createInfoMain(formatMoney(option.price), `${option.choiceCount} variações`, 'choice-main'));
+    head.appendChild(createInfoMain(formatMoney(option.price), `${option.choiceCount} ${state.locale.variations}`, 'choice-main'));
 
     button.appendChild(head);
     button.addEventListener('click', () => post('selectOption', { optionId: option.id }));
@@ -178,7 +190,7 @@ function renderChoices() {
   selectedPriceEl.textContent = formatMoney(state.selectedPrice);
   sessionTotalEl.textContent = formatMoney(state.sessionTotal);
 
-  previewTitleEl.textContent = option?.label ?? 'Preview';
+  previewTitleEl.textContent = option?.label ?? state.locale.previewFallback;
   previewSubtitleEl.textContent = option ? `${option.group} · ${formatMoney(option.price)}` : state.locale.emptyCategory;
   optionNameEl.textContent = option?.label ?? state.locale.emptyCategory;
   optionGroupEl.textContent = option ? `${option.group} · ${option.currentLabel}` : state.locale.noChoices;
@@ -201,10 +213,10 @@ function renderChoices() {
     head.appendChild(createInfoMain(formatMoney(entry.price), statusLabel(entry), 'choice-main'));
 
     button.appendChild(head);
-    button.addEventListener('mouseenter', () => post('previewChoice', { optionId: state.currentOption, choiceId: entry.id }));
-    button.addEventListener('focus', () => post('previewChoice', { optionId: state.currentOption, choiceId: entry.id }));
+    button.addEventListener('mouseenter', () => schedulePreview(entry.id));
+    button.addEventListener('focus', () => schedulePreview(entry.id));
     button.addEventListener('click', () => {
-      post('previewChoice', { optionId: state.currentOption, choiceId: entry.id });
+      schedulePreview(entry.id);
       if (entry.isAction) {
         post('installChoice', { optionId: state.currentOption, choiceId: entry.id });
       }
@@ -217,6 +229,7 @@ function renderChoices() {
 
 function render(payload) {
   state = payload;
+  previewRequest = null;
   setVisibility(payload.visible);
   renderCategories();
   renderOptions();
@@ -231,6 +244,7 @@ window.addEventListener('message', (event) => {
 
   if (payload.action === 'close') {
     setVisibility(false);
+    previewRequest = null;
     state = null;
   }
 });
@@ -240,6 +254,7 @@ window.addEventListener('keydown', (event) => {
     post('close');
   }
 });
+
 
 applyBtn.addEventListener('click', () => {
   if (!state?.currentOption || !state?.currentChoice) return;

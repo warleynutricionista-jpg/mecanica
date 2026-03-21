@@ -48,6 +48,23 @@ local function getLiftVehicle(shopId, liftIndex)
     return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
 end
 
+local function getLiftReferenceForVehicle(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return nil
+    end
+
+    local state = VRS.GetLiftStateForVehicle and select(1, VRS.GetLiftStateForVehicle(vehicle)) or nil
+    if not state or not state.shopId or not state.liftIndex then
+        return nil
+    end
+
+    return {
+        shopId = state.shopId,
+        liftIndex = state.liftIndex,
+        state = state,
+    }
+end
+
 local function removeLiftTargets()
     for key, zoneId in pairs(liftTargets) do
         exports.ox_target:removeZone(zoneId)
@@ -77,7 +94,9 @@ local function createLiftTargets(shopId, shop)
                     label = 'Serviços do elevador',
                     distance = 3.0,
                     canInteract = function()
-                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil
+                            and canUseLiftPanel(shopId)
+                            and getLiftVehicle(shopId, i) == nil
                     end,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
@@ -89,25 +108,12 @@ local function createLiftTargets(shopId, shop)
                     label = 'Painel do Elevador',
                     distance = 3.0,
                     canInteract = function()
-                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil
+                            and canUseLiftPanel(shopId)
+                            and getLiftVehicle(shopId, i) == nil
                     end,
                     onSelect = function()
                         VRS.OpenLiftPanel(shopId, i)
-                    end,
-                },
-                {
-                    name = liftId .. '_repair',
-                    icon = 'fas fa-wrench',
-                    label = 'Reparo de Oficina',
-                    distance = 3.0,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId) and getLiftVehicle(shopId, i) ~= nil
-                    end,
-                    onSelect = function()
-                        local vehicle = getLiftVehicle(shopId, i)
-                        if vehicle then
-                            VRS.OpenShopRepairMenu(vehicle, shopId)
-                        end
                     end,
                 },
             },
@@ -220,6 +226,26 @@ local function createVehicleTargets()
 
     exports.ox_target:addGlobalVehicle({
         {
+            name = 'vrs_lift_vehicle_command',
+            icon = 'fas fa-screwdriver-wrench',
+            label = 'Ponto de comando',
+            distance = 3.0,
+            bones = { 'bonnet' },
+            canInteract = function(entity)
+                local liftRef = getLiftReferenceForVehicle(entity)
+                return liftRef ~= nil and canUseLiftPanel(liftRef.shopId)
+            end,
+            onSelect = function(data)
+                local vehicle = data.entity
+                if not vehicle or not DoesEntityExist(vehicle) then return end
+
+                local liftRef = getLiftReferenceForVehicle(vehicle)
+                if not liftRef then return end
+
+                VRS.OpenLiftMenu(liftRef.shopId, liftRef.liftIndex)
+            end,
+        },
+        {
             name = 'vrs_vehicle_diagnose',
             icon = 'fas fa-stethoscope',
             label = 'Verificar veículo',
@@ -261,6 +287,7 @@ local function removeVehicleTargets()
 
     pcall(function()
         exports.ox_target:removeGlobalVehicle({
+            'vrs_lift_vehicle_command',
             'vrs_vehicle_diagnose',
             'vrs_street_repair',
         })

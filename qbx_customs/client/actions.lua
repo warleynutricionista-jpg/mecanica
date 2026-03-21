@@ -1,93 +1,61 @@
 local session = require 'client.session'
-local sharedConfig = require 'config.shared'
+local pricing = require 'shared.pricing'
+local vehicle = require 'client.services.vehicle'
+local feedback = require 'client.services.feedback'
 
 local actions = {}
 
-local function getVehicle()
-    return session.vehicle
-end
+actions.getPrice = pricing.get
 
-local function getPrice(mod, level)
-    if mod == 'cosmetic' or mod == 18 then
-        return sharedConfig.prices[mod]
-    end
-
-    local price = sharedConfig.prices[mod]
-    if type(price) == 'table' then
-        return price[level] or price[#price] or 0
-    end
-
-    return price or 0
-end
-
-actions.getPrice = getPrice
-
-function actions.captureCommittedProps()
-    session.committedProps = lib.getVehicleProperties(getVehicle())
-    if not session.originalProps then
-        session.originalProps = table.clone(session.committedProps)
-    end
-end
-
-function actions.restoreCommitted()
-    if not session.committedProps then return end
-    lib.setVehicleProperties(getVehicle(), session.committedProps)
-    SetVehicleModKit(getVehicle(), 0)
-    session.previewOption = nil
-    session.previewChoice = nil
-end
-
-function actions.restoreOriginal()
-    if not session.originalProps then return end
-    lib.setVehicleProperties(getVehicle(), session.originalProps)
-    SetVehicleModKit(getVehicle(), 0)
-    session.committedProps = table.clone(session.originalProps)
-    session.previewOption = nil
-    session.previewChoice = nil
-end
+actions.captureCommittedProps = vehicle.captureCommittedProps
+actions.restoreCommitted = vehicle.restoreCommitted
+actions.restoreOriginal = vehicle.restoreOriginal
 
 function actions.applyPreview(option, choice)
-    actions.restoreCommitted()
-    choice.apply(getVehicle())
+    if not option or not choice or not choice.apply then return false end
+
+    vehicle.restoreCommitted()
+    choice.apply(vehicle.get())
     session.previewOption = option.id
     session.previewChoice = choice.id
+    return true
 end
 
 function actions.commitChoice(option, choice)
+    if not option or not choice then return false end
+
     local success = InstallMod(choice.duplicate, option.priceMod, {
         description = choice.successLabel or locale('menus.general.installed', choice.label),
     }, choice.level)
 
-    if success then
-        actions.captureCommittedProps()
-        session.sessionTotal += choice.price or 0
-    else
-        actions.restoreCommitted()
+    if not success then
+        vehicle.restoreCommitted()
+        return false
     end
 
-    return success
+    vehicle.captureCommittedProps()
+    session.sessionTotal += choice.price or 0
+    return true
 end
 
 function actions.repairVehicle(price)
-    local success = lib.callback.await('qbx_customs:server:repair', false, GetVehicleBodyHealth(getVehicle()))
-    if success then
-        exports.qbx_core:Notify(locale('notifications.success.repaired'), 'success')
-        qbx.playAudio({
-            audioName = 'PICK_UP',
-            audioRef = 'HUD_FRONTEND_DEFAULT_SOUNDSET'
-        })
-        local fuelLevel = GetVehicleFuelLevel(getVehicle())
-        SetVehicleBodyHealth(getVehicle(), 1000.0)
-        SetVehicleEngineHealth(getVehicle(), 1000.0)
-        SetVehicleFixed(getVehicle())
-        SetVehicleFuelLevel(getVehicle(), fuelLevel)
-        actions.captureCommittedProps()
-        session.sessionTotal += price
-        return true
+    if not vehicle.isDriveable() then
+        feedback.notify(locale('notifications.error.invalidVehicle'), 'error')
+        return false
     end
 
-    exports.qbx_core:Notify(locale('notifications.error.money'), 'error')
-    return false
+    local success = lib.callback.await('qbx_customs:server:repair', false, GetVehicleBodyHealth(vehicle.get()))
+    if not success then
+        feedback.notify(locale('notifications.error.money'), 'error')
+        return false
+    end
+
+    vehicle.applyRepairState()
+    vehicle.captureCommittedProps()
+    session.sessionTotal += price or 0
+    feedback.notify(locale('notifications.success.repaired'), 'success')
+    feedback.playConfirmSound()
+    return true
 end
 
 return actions

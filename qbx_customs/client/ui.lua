@@ -8,15 +8,13 @@ local runtimeCatalog
 
 local uiState = {
     isUiOpen = false,
-    isUiLoaded = false,
     isUiBusy = false,
     currentView = nil,
-    lastOpenAt = 0,
 }
 
-local function setFocus(hasFocus, keepInput)
+local function setFocus(hasFocus)
     SetNuiFocus(hasFocus, hasFocus)
-    SetNuiFocusKeepInput(hasFocus and keepInput or false)
+    SetNuiFocusKeepInput(false)
 end
 
 local function resetUiState()
@@ -24,32 +22,32 @@ local function resetUiState()
     uiState.isUiOpen = false
     uiState.isUiBusy = false
     uiState.currentView = nil
-    uiState.lastOpenAt = 0
 end
 
-local function rebuildPayload(action, extra)
-    local built = payloadBuilder.build(action)
+local function rebuildPayload()
+    local built = payloadBuilder.build('open')
     runtimeCatalog = built.catalog
 
     local payload = built.nui
-    if extra then
-        for key, value in pairs(extra) do
-            payload[key] = value
-        end
-    end
-
-    payload.uiState = {
-        isOpen = uiState.isUiOpen,
-        isBusy = uiState.isUiBusy,
-        isLoaded = uiState.isUiLoaded,
-        currentView = uiState.currentView,
-    }
+    payload.type = 'custom'
+    payload.show = true
+    payload.visible = true
+    payload.currentView = uiState.currentView or 'main'
 
     return payload
 end
 
-local function sendMessage(payload)
-    SendNUIMessage(payload)
+local function sendOpenPayload()
+    SendNUIMessage(rebuildPayload())
+end
+
+local function sendClosePayload()
+    SendNUIMessage({
+        type = 'custom',
+        show = false,
+        visible = false,
+        currentView = nil,
+    })
 end
 
 local function refreshMenu()
@@ -59,16 +57,10 @@ local function refreshMenu()
     end
 
     if not uiState.isUiOpen then
-        return false, 'uiClosed'
+        return false, 'closed'
     end
 
-    sendMessage(rebuildPayload('sync', {
-        visible = true,
-        currentView = uiState.currentView,
-        overlay = false,
-        focus = true,
-    }))
-
+    sendOpenPayload()
     return true
 end
 
@@ -87,18 +79,6 @@ local function getChoice(option, choiceId)
     return nil
 end
 
-function ui.markLoaded()
-    uiState.isUiLoaded = true
-    resetUiState()
-    setFocus(false, false)
-    sendMessage({
-        action = 'hardReset',
-        visible = false,
-        overlay = false,
-        currentView = nil,
-    })
-end
-
 function ui.isOpen()
     return uiState.isUiOpen
 end
@@ -108,16 +88,8 @@ function ui.isBusy()
 end
 
 function ui.open(view)
-    if not uiState.isUiLoaded then
+    if uiState.isUiBusy or uiState.isUiOpen then
         return false, 'busy'
-    end
-
-    if uiState.isUiBusy then
-        return false, 'busy'
-    end
-
-    if uiState.isUiOpen then
-        return false, 'alreadyOpen'
     end
 
     local ok, reason = validator.ensureActiveSession()
@@ -127,19 +99,9 @@ function ui.open(view)
 
     uiState.isUiBusy = true
     uiState.currentView = view or 'main'
+    sendOpenPayload()
+    setFocus(true)
     uiState.isUiOpen = true
-
-    local payload = rebuildPayload('open', {
-        visible = true,
-        currentView = uiState.currentView,
-        overlay = false,
-        focus = true,
-    })
-
-    sendMessage(payload)
-    setFocus(true, false)
-
-    uiState.lastOpenAt = GetGameTimer()
     uiState.isUiBusy = false
 
     return true
@@ -149,36 +111,16 @@ function ui.refresh()
     return refreshMenu()
 end
 
-function ui.close(reason)
-    setFocus(false, false)
+function ui.close()
+    setFocus(false)
+    sendClosePayload()
     resetUiState()
-    sendMessage({
-        action = 'hardReset',
-        visible = false,
-        overlay = false,
-        currentView = nil,
-        reason = reason,
-    })
 end
 
-function ui.forceReset(reason)
-    actions.restoreCommitted()
-    ui.close(reason or 'forcedReset')
-end
-
-function ui.ensureClosed(reason)
-    if session.isOpen or uiState.isUiOpen or uiState.isUiBusy then
-        ui.forceReset(reason or 'desync')
-    else
-        setFocus(false, false)
-        sendMessage({
-            action = 'hardReset',
-            visible = false,
-            overlay = false,
-            currentView = nil,
-            reason = reason or 'idleReset',
-        })
-    end
+function ui.ensureClosed()
+    setFocus(false)
+    sendClosePayload()
+    resetUiState()
 end
 
 function ui.getOption(optionId)

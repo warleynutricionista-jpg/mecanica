@@ -36,7 +36,7 @@ end
 
 local function closeMenu(saveVehicle, reason)
     if not session.isOpen or session.isClosing then
-        ui.ensureClosed(reason or 'closeWithoutSession')
+        ui.ensureClosed()
         return false
     end
 
@@ -96,19 +96,14 @@ local function startSessionGuard()
             end
         end
 
-        ui.ensureClosed('sessionGuardStop')
+        ui.ensureClosed()
         sessionGuardRunning = false
     end)
 end
 
 CreateThread(function()
     Wait(0)
-    ui.ensureClosed('resourceStart')
-end)
-
-RegisterNUICallback('uiReady', function(_, cb)
-    ui.markLoaded()
-    cb(1)
+    ui.ensureClosed()
 end)
 
 RegisterNUICallback('selectCategory', function(data, cb)
@@ -177,14 +172,14 @@ lib.onCache('vehicle', function(vehicleEntity)
     end
 
     if not session.isOpen then
-        ui.ensureClosed('vehicleCacheUpdate')
+        ui.ensureClosed()
     end
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
 
-    ui.ensureClosed('resourceStop')
+    ui.ensureClosed()
 
     if session.isOpen then
         stopDragCam()
@@ -216,7 +211,7 @@ return function()
     if not opened then
         stopDragCam()
         session.reset()
-        ui.ensureClosed(openReason or 'openFailed')
+        ui.ensureClosed()
         notifyCloseReason(openReason)
         return false
     end

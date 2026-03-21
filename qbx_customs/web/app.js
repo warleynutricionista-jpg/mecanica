@@ -36,8 +36,11 @@ const initialState = {
   openToken: 0,
 };
 
-const uiState = { ...initialState };
-let failsafeTimer = 0;
+const uiState = {
+  show: false,
+  payload: null,
+  previewRequest: null,
+};
 
 const formatMoney = (value) => `${uiState.payload?.currency ?? 'R$'}${Number(value || 0).toLocaleString('pt-BR')}`;
 
@@ -47,27 +50,15 @@ function post(event, data = {}) {
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify(data),
   }).catch(() => {
-    closeUI();
+    closeCustoms();
   });
 }
 
-function clearFailsafe() {
-  if (failsafeTimer) {
-    window.clearTimeout(failsafeTimer);
-    failsafeTimer = 0;
-  }
-}
-
-function setClosedAttributes() {
-  body.classList.remove('ui-active');
-  app.dataset.open = 'false';
-  app.setAttribute('aria-hidden', 'true');
-}
-
-function setOpenAttributes() {
-  body.classList.add('ui-active');
-  app.dataset.open = 'true';
-  app.setAttribute('aria-hidden', 'false');
+function setVisible(visible) {
+  uiState.show = visible;
+  body.classList.toggle('ui-active', visible);
+  app.dataset.open = visible ? 'true' : 'false';
+  app.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
 
 function clearView() {
@@ -99,60 +90,11 @@ function clearView() {
   emptyChoicesEl.classList.add('hidden');
 }
 
-function resetState() {
-  clearFailsafe();
-  uiState.isOpen = false;
-  uiState.currentView = null;
+function closeCustoms() {
   uiState.payload = null;
   uiState.previewRequest = null;
-  uiState.openToken += 1;
-}
-
-function closeUI() {
-  resetState();
-  setClosedAttributes();
+  setVisible(false);
   clearView();
-}
-
-function hardResetUI(reason = 'hard-reset') {
-  closeUI();
-  if (reason === 'message-close' || reason === 'message-reset') {
-    return;
-  }
-
-  post('close');
-}
-
-function scheduleFailsafe(expectedToken) {
-  clearFailsafe();
-  failsafeTimer = window.setTimeout(() => {
-    if (!uiState.isOpen || expectedToken !== uiState.openToken) {
-      return;
-    }
-
-    const hasRenderableContent = Boolean(
-      uiState.payload
-      && uiState.payload.locale
-      && Array.isArray(uiState.payload.categories)
-      && categoriesEl.childElementCount === uiState.payload.categories.length
-    );
-
-    if (!hasRenderableContent) {
-      hardResetUI('render-timeout');
-    }
-  }, 1500);
-}
-
-function schedulePreview(choiceId) {
-  if (!uiState.isOpen || !uiState.payload?.currentOption || !choiceId) return;
-  if (uiState.previewRequest === choiceId) return;
-
-  uiState.previewRequest = choiceId;
-  const currentToken = uiState.openToken;
-  window.requestAnimationFrame(() => {
-    if (!uiState.isOpen || currentToken !== uiState.openToken || uiState.previewRequest !== choiceId || !uiState.payload?.currentOption) return;
-    post('previewChoice', { optionId: uiState.payload.currentOption, choiceId });
-  });
 }
 
 function createIcon(asset, fallback) {
@@ -223,8 +165,20 @@ function statusLabel(choice) {
   return uiState.payload.locale.available;
 }
 
+function schedulePreview(choiceId) {
+  if (!uiState.show || !uiState.payload?.currentOption || !choiceId) return;
+  if (uiState.previewRequest === choiceId) return;
+
+  uiState.previewRequest = choiceId;
+  window.requestAnimationFrame(() => {
+    if (!uiState.show || uiState.previewRequest !== choiceId || !uiState.payload?.currentOption) return;
+    post('previewChoice', { optionId: uiState.payload.currentOption, choiceId });
+  });
+}
+
 function renderCategories() {
   categoriesEl.replaceChildren();
+
   uiState.payload.categories.forEach((category) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -327,9 +281,15 @@ function renderChoices() {
   applyBtn.disabled = !option || !choice || !!choice.blocked || !!choice.installed;
 }
 
-function renderUI(payload) {
+function openCustoms(payload) {
+  if (!payload?.show) {
+    closeCustoms();
+    return;
+  }
+
   uiState.payload = payload;
   uiState.previewRequest = null;
+  setVisible(true);
   renderCategories();
   renderOptions();
   renderChoices();
@@ -356,31 +316,18 @@ window.hardResetUI = hardResetUI;
 
 window.addEventListener('message', (event) => {
   const payload = event.data;
-  if (!payload || !payload.action) return;
+  if (!payload || payload.type !== 'custom') return;
 
-  if (payload.action === 'close') {
-    closeUI();
+  if (payload.show) {
+    openCustoms(payload);
     return;
   }
 
-  if (payload.action === 'hardReset') {
-    closeUI();
-    return;
-  }
-
-  if (payload.action === 'open') {
-    openUI(payload);
-    return;
-  }
-
-  if (payload.action === 'sync' && uiState.isOpen) {
-    renderUI(payload);
-    scheduleFailsafe(uiState.openToken);
-  }
+  closeCustoms();
 });
 
 window.addEventListener('keydown', (event) => {
-  if (!uiState.isOpen) return;
+  if (!uiState.show) return;
 
   if (event.key === 'Escape') {
     post('close');
@@ -388,33 +335,30 @@ window.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && uiState.isOpen) {
+  if (document.hidden && uiState.show) {
     post('focusLost');
   }
 });
 
 window.addEventListener('blur', () => {
-  if (uiState.isOpen) {
+  if (uiState.show) {
     post('focusLost');
   }
 });
 
 applyBtn.addEventListener('click', () => {
-  if (!uiState.isOpen || !uiState.payload?.currentOption || !uiState.payload?.currentChoice) return;
+  if (!uiState.show || !uiState.payload?.currentOption || !uiState.payload?.currentChoice) return;
   post('installChoice', { optionId: uiState.payload.currentOption, choiceId: uiState.payload.currentChoice });
 });
 
 restoreBtn.addEventListener('click', () => {
-  if (!uiState.isOpen) return;
+  if (!uiState.show) return;
   post('restorePreview');
 });
 
 closeBtn.addEventListener('click', () => {
-  if (!uiState.isOpen) return;
+  if (!uiState.show) return;
   post('close');
 });
 
-window.addEventListener('load', () => {
-  closeUI();
-  post('uiReady');
-});
+closeCustoms();

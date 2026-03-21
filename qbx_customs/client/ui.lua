@@ -6,19 +6,61 @@ local validator = require 'client.services.validator'
 local ui = {}
 local runtimeCatalog
 
-local function rebuildPayload(action)
-    local built = payloadBuilder.build(action)
+local uiState = {
+    isUiOpen = false,
+    isUiBusy = false,
+    currentView = nil,
+}
+
+local function setFocus(hasFocus)
+    SetNuiFocus(hasFocus, hasFocus)
+    SetNuiFocusKeepInput(false)
+end
+
+local function resetUiState()
+    runtimeCatalog = nil
+    uiState.isUiOpen = false
+    uiState.isUiBusy = false
+    uiState.currentView = nil
+end
+
+local function rebuildPayload()
+    local built = payloadBuilder.build('open')
     runtimeCatalog = built.catalog
-    return built.nui
+
+    local payload = built.nui
+    payload.type = 'custom'
+    payload.show = true
+    payload.visible = true
+    payload.currentView = uiState.currentView or 'main'
+
+    return payload
+end
+
+local function sendOpenPayload()
+    SendNUIMessage(rebuildPayload())
+end
+
+local function sendClosePayload()
+    SendNUIMessage({
+        type = 'custom',
+        show = false,
+        visible = false,
+        currentView = nil,
+    })
 end
 
 local function refreshMenu()
     local ok, reason = validator.ensureActiveSession()
-    if not ok and reason ~= 'closed' then
-        return false
+    if not ok then
+        return false, reason
     end
 
-    SendNUIMessage(rebuildPayload('sync'))
+    if not uiState.isUiOpen then
+        return false, 'closed'
+    end
+
+    sendOpenPayload()
     return true
 end
 
@@ -37,21 +79,48 @@ local function getChoice(option, choiceId)
     return nil
 end
 
-function ui.open()
-    SendNUIMessage(rebuildPayload('open'))
-    SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(false)
+function ui.isOpen()
+    return uiState.isUiOpen
+end
+
+function ui.isBusy()
+    return uiState.isUiBusy
+end
+
+function ui.open(view)
+    if uiState.isUiBusy or uiState.isUiOpen then
+        return false, 'busy'
+    end
+
+    local ok, reason = validator.ensureActiveSession()
+    if not ok then
+        return false, reason
+    end
+
+    uiState.isUiBusy = true
+    uiState.currentView = view or 'main'
+    sendOpenPayload()
+    setFocus(true)
+    uiState.isUiOpen = true
+    uiState.isUiBusy = false
+
+    return true
 end
 
 function ui.refresh()
-    refreshMenu()
+    return refreshMenu()
 end
 
-function ui.hide()
-    runtimeCatalog = nil
-    SendNUIMessage({ action = 'close' })
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+function ui.close()
+    setFocus(false)
+    sendClosePayload()
+    resetUiState()
+end
+
+function ui.ensureClosed()
+    setFocus(false)
+    sendClosePayload()
+    resetUiState()
 end
 
 function ui.getOption(optionId)

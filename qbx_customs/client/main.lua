@@ -36,13 +36,14 @@ end
 
 local function closeMenu(saveVehicle, reason)
     if not session.isOpen or session.isClosing then
+        ui.ensureClosed()
         return false
     end
 
     session.markClosing()
     actions.restoreCommitted()
     stopDragCam()
-    ui.hide()
+    ui.close(reason)
 
     if saveVehicle and vehicle.isValid(session.vehicle) then
         TriggerServerEvent('qbx_customs:server:saveVehicleProps', lib.getVehicleProperties(session.vehicle))
@@ -85,14 +86,20 @@ local function startSessionGuard()
             end
 
             if IsPauseMenuActive() then
-                closeMenu(true)
+                closeMenu(true, 'pauseMenu')
                 break
             end
         end
 
+        ui.ensureClosed()
         sessionGuardRunning = false
     end)
 end
+
+CreateThread(function()
+    Wait(0)
+    ui.ensureClosed()
+end)
 
 RegisterNUICallback('selectCategory', function(data, cb)
     if ensureSessionOrClose(true) then
@@ -127,10 +134,9 @@ RegisterNUICallback('installChoice', function(data, cb)
 end)
 
 RegisterNUICallback('close', function(_, cb)
-    closeMenu(true)
+    closeMenu(true, 'nuiClose')
     cb(1)
 end)
-
 
 RegisterNUICallback('restorePreview', function(_, cb)
     if ensureSessionOrClose(false) then
@@ -138,6 +144,11 @@ RegisterNUICallback('restorePreview', function(_, cb)
         ui.refresh()
     end
 
+    cb(1)
+end)
+
+RegisterNUICallback('focusLost', function(_, cb)
+    closeMenu(true, 'focusLost')
     cb(1)
 end)
 
@@ -152,20 +163,31 @@ end)
 lib.onCache('vehicle', function(vehicleEntity)
     if session.isOpen and not vehicleEntity then
         closeMenu(false, 'leftVehicle')
+        return
+    end
+
+    if not session.isOpen then
+        ui.ensureClosed()
     end
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
 
+    ui.ensureClosed()
+
     if session.isOpen then
-        closeMenu(false)
-    else
-        SetNuiFocus(false, false)
+        stopDragCam()
+        session.reset()
     end
 end)
 
 return function()
+    if session.isOpen or session.isClosing or ui.isBusy() or ui.isOpen() then
+        notifyCloseReason('busy')
+        return false
+    end
+
     local currentVehicle = cache.vehicle
     local canOpen, reason = validator.canOpenCustoms(currentVehicle)
     if not canOpen then
@@ -179,6 +201,15 @@ return function()
     disableControlsLoop()
     startSessionGuard()
     startDragCam(currentVehicle)
-    ui.open()
+
+    local opened, openReason = ui.open('main')
+    if not opened then
+        stopDragCam()
+        session.reset()
+        ui.ensureClosed()
+        notifyCloseReason(openReason)
+        return false
+    end
+
     return true
 end

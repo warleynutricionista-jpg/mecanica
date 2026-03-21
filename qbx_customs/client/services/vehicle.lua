@@ -27,6 +27,7 @@ end
 
 function vehicle.set(targetVehicle)
     session.vehicle = targetVehicle
+    session.vehicleNetId = vehicle.isValid(targetVehicle) and NetworkGetNetworkIdFromEntity(targetVehicle) or 0
 
     if vehicle.isValid(targetVehicle) then
         SetVehicleModKit(targetVehicle, 0)
@@ -36,6 +37,7 @@ end
 function vehicle.captureCommittedProps()
     return withCurrentVehicle(function(targetVehicle)
         session.committedProps = lib.getVehicleProperties(targetVehicle)
+        session.setLastAppliedState(session.committedProps)
 
         if not session.originalProps then
             session.originalProps = table.clone(session.committedProps)
@@ -56,6 +58,7 @@ end
 function vehicle.restoreCommitted()
     local restored = vehicle.restoreProperties(session.committedProps)
     if restored then
+        session.setLastAppliedState(session.committedProps)
         session.clearPreview()
     end
 
@@ -70,6 +73,7 @@ function vehicle.restoreOriginal()
     local restored = vehicle.restoreProperties(session.originalProps)
     if restored then
         session.committedProps = table.clone(session.originalProps)
+        session.setLastAppliedState(session.committedProps)
         session.clearPreview()
     end
 

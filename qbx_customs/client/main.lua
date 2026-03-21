@@ -43,7 +43,8 @@ local function closeMenu(saveVehicle, reason)
     session.markClosing()
     actions.restoreCommitted()
     stopDragCam()
-    ui.close(reason)
+    ui.setCameraActive(false)
+    ui.CloseCustomsUI(reason)
 
     if saveVehicle and vehicle.isValid(session.vehicle) then
         TriggerServerEvent('qbx_customs:server:saveVehicleProps', lib.getVehicleProperties(session.vehicle))
@@ -67,6 +68,10 @@ local function ensureSessionOrClose(saveVehicle)
     closeMenu(saveVehicle, reason)
     return false
 end
+
+ui.setCloseHandler(function(reason)
+    closeMenu(true, reason)
+end)
 
 local function startSessionGuard()
     if sessionGuardRunning then
@@ -106,57 +111,6 @@ CreateThread(function()
     ui.ensureClosed()
 end)
 
-RegisterNUICallback('selectCategory', function(data, cb)
-    if ensureSessionOrClose(true) then
-        ui.selectCategory(data.categoryId)
-    end
-
-    cb(1)
-end)
-
-RegisterNUICallback('selectOption', function(data, cb)
-    if ensureSessionOrClose(true) then
-        ui.selectOption(data.optionId)
-    end
-
-    cb(1)
-end)
-
-RegisterNUICallback('previewChoice', function(data, cb)
-    if ensureSessionOrClose(false) then
-        ui.previewChoice(data.optionId, data.choiceId)
-    end
-
-    cb(1)
-end)
-
-RegisterNUICallback('installChoice', function(data, cb)
-    if ensureSessionOrClose(true) then
-        ui.installChoice(data.optionId, data.choiceId)
-    end
-
-    cb(1)
-end)
-
-RegisterNUICallback('close', function(_, cb)
-    closeMenu(true, 'nuiClose')
-    cb(1)
-end)
-
-RegisterNUICallback('restorePreview', function(_, cb)
-    if ensureSessionOrClose(false) then
-        actions.restoreCommitted()
-        ui.refresh()
-    end
-
-    cb(1)
-end)
-
-RegisterNUICallback('focusLost', function(_, cb)
-    closeMenu(true, 'focusLost')
-    cb(1)
-end)
-
 lib.callback.register('qbx_customs:client:vehicleProps', function()
     if not ensureSessionOrClose(false) then
         return nil
@@ -179,10 +133,11 @@ end)
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
 
-    ui.ensureClosed()
+    ui.HardResetCustomsUI()
 
     if session.isOpen then
         stopDragCam()
+        ui.setCameraActive(false)
         session.reset()
     end
 end)
@@ -206,12 +161,14 @@ return function()
     disableControlsLoop()
     startSessionGuard()
     startDragCam(currentVehicle)
+    ui.setCameraActive(true)
 
-    local opened, openReason = ui.open('main')
+    local opened, openReason = ui.OpenCustomsUI()
     if not opened then
         stopDragCam()
+        ui.setCameraActive(false)
         session.reset()
-        ui.ensureClosed()
+        ui.HardResetCustomsUI()
         notifyCloseReason(openReason)
         return false
     end

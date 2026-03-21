@@ -12,8 +12,6 @@ version '1.1.0'
 ox_lib 'locale'
 shared_script '@ox_lib/init.lua'
 
-ui_page 'web/index.html'
-
 client_scripts {
     '@qbx_core/modules/playerdata.lua',
     '@qbx_core/modules/lib.lua',
@@ -37,10 +35,6 @@ files {
     'config/*.lua',
     'shared/**/*.lua',
     'client/**/*.lua',
-    'web/index.html',
-    'web/app.js',
-    'web/style.css',
-    'web/assets/**/*',
     'carcols_gen9.meta',
     'carmodcols_gen9.meta',
 }

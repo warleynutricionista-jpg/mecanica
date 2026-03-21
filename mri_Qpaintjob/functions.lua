@@ -1,19 +1,21 @@
-QBCore = exports["qb-core"]:GetCoreObject()
+Paintjob = Paintjob or {}
 
-_ShowNotification = function(msg)
-    lib.notify({
-        title = msg,
-    })
+if Paintjob.__legacyClientBoot then
+    return
 end
 
-_ShowHelpNotification = function(msg)
-    lib.showTextUI(msg)
-end
+Paintjob.__legacyClientBoot = true
 
-_GetClosestVehicle = function(location)
-    return QBCore.Functions.GetClosestVehicle(location)
-end
+local resource = GetCurrentResourceName()
+local files = {
+    'client/utils.lua',
+    'client/effects.lua',
+    'client/paint.lua',
+    'client/ui.lua',
+}
 
-_GetPlayerJobName = function()
-    return QBCore.Functions.GetPlayerData().job.name
+for _, path in ipairs(files) do
+    local chunk = LoadResourceFile(resource, path)
+    assert(chunk, ('mri_Qpaintjob: could not load %s'):format(path))
+    assert(load(chunk, ('@@%s/%s'):format(resource, path)))()
 end

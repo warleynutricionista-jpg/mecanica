@@ -38,8 +38,9 @@ local function getChoice(option, choiceId)
 end
 
 function ui.open()
-    SetNuiFocus(true, true)
     SendNUIMessage(rebuildPayload())
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
 end
 
 function ui.refresh()
@@ -47,8 +48,9 @@ function ui.refresh()
 end
 
 function ui.hide()
-    SetNuiFocus(false, false)
     SendNUIMessage({ action = 'close' })
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
 end
 
 function ui.getOption(optionId)

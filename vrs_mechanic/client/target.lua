@@ -4,6 +4,7 @@
 
 local liftTargets = {}
 local panelTargets = {}
+local liftCommandTargets = {}
 local locationTargets = {}
 local vehicleTargetsCreated = false
 
@@ -48,6 +49,45 @@ local function getLiftVehicle(shopId, liftIndex)
     return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
 end
 
+function getLiftReferenceForVehicle(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return nil
+    end
+
+    local state = VRS.GetLiftStateForVehicle and select(1, VRS.GetLiftStateForVehicle(vehicle)) or nil
+    if not state or not state.shopId or not state.liftIndex then
+        return nil
+    end
+
+    return {
+        shopId = state.shopId,
+        liftIndex = state.liftIndex,
+        state = state,
+    }
+end
+
+local function getVehicleHoodCommandCoords(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return nil
+    end
+
+    local minDim, maxDim = GetModelDimensions(GetEntityModel(vehicle))
+    local vehicleHeight = math.max((maxDim.z - minDim.z), 0.8)
+    local forwardOffset = math.max(maxDim.y - 0.35, 1.1)
+    local verticalOffset = minDim.z + (vehicleHeight * 0.55)
+
+    local coords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, forwardOffset, verticalOffset)
+    return vec3(coords.x, coords.y, coords.z)
+end
+
+local function removeLiftCommandTarget(liftKey)
+    local target = liftCommandTargets[liftKey]
+    if not target then return end
+
+    exports.ox_target:removeZone(target.zoneId)
+    liftCommandTargets[liftKey] = nil
+end
+
 local function removeLiftTargets()
     for key, zoneId in pairs(liftTargets) do
         exports.ox_target:removeZone(zoneId)
@@ -57,6 +97,10 @@ local function removeLiftTargets()
     for key, zoneId in pairs(panelTargets) do
         exports.ox_target:removeZone(zoneId)
         panelTargets[key] = nil
+    end
+
+    for liftKey in pairs(liftCommandTargets) do
+        removeLiftCommandTarget(liftKey)
     end
 end
 
@@ -77,7 +121,9 @@ local function createLiftTargets(shopId, shop)
                     label = 'Serviços do elevador',
                     distance = 3.0,
                     canInteract = function()
-                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil
+                            and canUseLiftPanel(shopId)
+                            and getLiftVehicle(shopId, i) == nil
                     end,
                     onSelect = function()
                         VRS.OpenLiftMenu(shopId, i)
@@ -89,25 +135,12 @@ local function createLiftTargets(shopId, shop)
                     label = 'Painel do Elevador',
                     distance = 3.0,
                     canInteract = function()
-                        return VRS.ResolveLiftReference(shopId, i) ~= nil and canUseLiftPanel(shopId)
+                        return VRS.ResolveLiftReference(shopId, i) ~= nil
+                            and canUseLiftPanel(shopId)
+                            and getLiftVehicle(shopId, i) == nil
                     end,
                     onSelect = function()
                         VRS.OpenLiftPanel(shopId, i)
-                    end,
-                },
-                {
-                    name = liftId .. '_repair',
-                    icon = 'fas fa-wrench',
-                    label = 'Reparo de Oficina',
-                    distance = 3.0,
-                    canInteract = function()
-                        return canUseLiftPanel(shopId) and getLiftVehicle(shopId, i) ~= nil
-                    end,
-                    onSelect = function()
-                        local vehicle = getLiftVehicle(shopId, i)
-                        if vehicle then
-                            VRS.OpenShopRepairMenu(vehicle, shopId)
-                        end
                     end,
                 },
             },
@@ -121,6 +154,62 @@ function VRS.RebuildLiftTargets()
 
     for shopId, shop in pairs(Config.Shops) do
         createLiftTargets(shopId, shop)
+    end
+end
+
+local function refreshLiftCommandTargets()
+    local activeTargets = {}
+
+    for liftKey, state in pairs(VRS.LiftState or {}) do
+        if state and state.vehicleNetId and state.shopId and state.liftIndex then
+            local vehicle = VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(state.vehicleNetId, true) or nil
+            local coords = vehicle and getVehicleHoodCommandCoords(vehicle) or nil
+
+            if vehicle and coords then
+                activeTargets[liftKey] = true
+                local current = liftCommandTargets[liftKey]
+                local needsRebuild = not current
+                    or #(current.coords - coords) > 0.15
+
+                if needsRebuild then
+                    if current then
+                        removeLiftCommandTarget(liftKey)
+                    end
+
+                    local commandShopId = state.shopId
+                    local commandLiftIndex = state.liftIndex
+                    local zoneId = exports.ox_target:addSphereZone({
+                        coords = coords,
+                        radius = 0.55,
+                        options = {
+                            {
+                                name = ('vrs_lift_command_%s'):format(liftKey),
+                                icon = 'fas fa-tools',
+                                label = 'Serviços do elevador',
+                                distance = 2.0,
+                                canInteract = function()
+                                    return canUseLiftPanel(commandShopId)
+                                end,
+                                onSelect = function()
+                                    VRS.OpenLiftMenu(commandShopId, commandLiftIndex)
+                                end,
+                            },
+                        },
+                    })
+
+                    liftCommandTargets[liftKey] = {
+                        zoneId = zoneId,
+                        coords = coords,
+                    }
+                end
+            end
+        end
+    end
+
+    for liftKey in pairs(liftCommandTargets) do
+        if not activeTargets[liftKey] then
+            removeLiftCommandTarget(liftKey)
+        end
     end
 end
 
@@ -276,6 +365,11 @@ CreateThread(function()
 
     VRS.RebuildLiftTargets()
     createVehicleTargets()
+
+    while true do
+        refreshLiftCommandTargets()
+        Wait(500)
+    end
 end)
 
 AddEventHandler('onResourceStop', function(resource)

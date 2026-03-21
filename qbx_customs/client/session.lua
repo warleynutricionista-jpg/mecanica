@@ -1,5 +1,6 @@
-QBXC_SESSION = {
+local session = {
     isOpen = false,
+    isClosing = false,
     vehicle = 0,
     committedProps = nil,
     originalProps = nil,
@@ -11,4 +12,18 @@ QBXC_SESSION = {
     previewChoice = nil,
 }
 
-return QBXC_SESSION
+function session.reset()
+    session.isOpen = false
+    session.isClosing = false
+    session.vehicle = 0
+    session.committedProps = nil
+    session.originalProps = nil
+    session.sessionTotal = 0
+    session.selectedCategory = nil
+    session.selectedOption = nil
+    session.selectedChoice = nil
+    session.previewOption = nil
+    session.previewChoice = nil
+end
+
+return session

@@ -7,7 +7,8 @@
     "error": {
       "money": "Você não tem dinheiro suficiente!",
       "alreadyInstalled": "Você já instalou esta modificação.",
-      "driverSeat": "Você precisa estar no banco do motorista para abrir a customização."
+      "driverSeat": "Você precisa estar no banco do motorista para abrir a customização.",
+      "invalidVehicle": "O veículo não está mais disponível para customização."
     },
     "props": {
       "installTitle": "Customizações"

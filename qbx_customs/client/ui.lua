@@ -1,153 +1,34 @@
 local session = require 'client.session'
-local catalog = require 'client.catalog'
 local actions = require 'client.actions'
-local config = require 'config.client'
+local payloadBuilder = require 'client.ui_payload'
+local validator = require 'client.services.validator'
 
 local ui = {}
 local runtimeCatalog
 
-local function summarizeChoice(choice)
-    return {
-        id = choice.id,
-        label = choice.label,
-        asset = choice.asset,
-        installed = choice.installed,
-        blocked = choice.blocked,
-        price = choice.price,
-        isAction = choice.isAction,
-        action = choice.action,
-    }
+local function rebuildPayload()
+    local built = payloadBuilder.build()
+    runtimeCatalog = built.catalog
+    return built.nui
 end
 
-local function buildPayload()
-    runtimeCatalog = catalog.build()
-
-    local selectedCategory = session.selectedCategory
-    local currentCategory
-    for _, category in ipairs(runtimeCatalog.categories) do
-        if category.enabled and not selectedCategory then
-            selectedCategory = category.id
-        end
-        if category.id == selectedCategory then
-            currentCategory = category
-        end
+local function refreshMenu()
+    local ok, reason = validator.ensureActiveSession()
+    if not ok and reason ~= 'closed' then
+        return false
     end
 
-    session.selectedCategory = selectedCategory
-    if currentCategory and (not session.selectedOption or not runtimeCatalog.options[session.selectedOption]) then
-        session.selectedOption = currentCategory.options[1] and currentCategory.options[1].id or nil
-    end
-
-    local currentOption = session.selectedOption and runtimeCatalog.options[session.selectedOption] or nil
-    if currentOption and (not session.selectedChoice) then
-        for _, choice in ipairs(currentOption.choices) do
-            if choice.installed then
-                session.selectedChoice = choice.id
-                break
-            end
-        end
-        if not session.selectedChoice and currentOption.choices[1] then
-            session.selectedChoice = currentOption.choices[1].id
-        end
-    end
-
-    local categoriesPayload = {}
-    for _, category in ipairs(runtimeCatalog.categories) do
-        local count = #category.options
-        categoriesPayload[#categoriesPayload + 1] = {
-            id = category.id,
-            label = category.label,
-            icon = category.icon,
-            asset = category.asset,
-            description = category.description,
-            enabled = count > 0,
-            count = count,
-        }
-    end
-
-    local optionsPayload = {}
-    if currentCategory then
-        for _, option in ipairs(currentCategory.options) do
-            local installedLabel = locale('ui.unavailable')
-            local installed = false
-            for _, choice in ipairs(option.choices) do
-                if choice.installed then
-                    installed = true
-                    installedLabel = choice.label
-                    break
-                end
-            end
-
-            optionsPayload[#optionsPayload + 1] = {
-                id = option.id,
-                label = option.label,
-                icon = option.icon,
-                asset = option.asset,
-                group = option.group,
-                price = option.price,
-                disabled = option.disabled,
-                currentLabel = installedLabel,
-                installed = installed,
-                choiceCount = #option.choices,
-                action = option.action,
-            }
-        end
-    end
-
-    local choicesPayload = {}
-    local selectedPrice = 0
-    if currentOption then
-        for _, choice in ipairs(currentOption.choices) do
-            if choice.id == session.selectedChoice then
-                selectedPrice = choice.price or 0
-            end
-            choicesPayload[#choicesPayload + 1] = summarizeChoice(choice)
-        end
-    end
-
-    return {
-        action = 'open',
-        visible = true,
-        currency = config.currency,
-        currentCategory = session.selectedCategory,
-        currentOption = session.selectedOption,
-        currentChoice = session.selectedChoice,
-        selectedPrice = selectedPrice,
-        sessionTotal = session.sessionTotal,
-        categories = categoriesPayload,
-        options = optionsPayload,
-        choices = choicesPayload,
-        vehicle = runtimeCatalog.vehicle,
-        locale = {
-            title = locale('menus.main.title'),
-            breadcrumbRoot = locale('ui.catalog'),
-            sessionTotal = locale('ui.sessionTotal'),
-            selectedPrice = locale('ui.selectedPrice'),
-            installed = locale('ui.statusInstalled'),
-            available = locale('ui.statusAvailable'),
-            blocked = locale('ui.statusBlocked'),
-            unavailable = locale('ui.unavailable'),
-            noOptions = locale('ui.noOptions'),
-            noChoices = locale('ui.noChoices'),
-            emptyCategory = locale('ui.emptyCategory'),
-            apply = locale('ui.apply'),
-            preview = locale('ui.preview'),
-            close = locale('ui.close'),
-            hint = locale('ui.hint'),
-            installedHint = locale('ui.installedHint'),
-            actionHint = locale('ui.actionHint'),
-        }
-    }
+    SendNUIMessage(rebuildPayload())
+    return true
 end
 
 function ui.open()
-    local payload = buildPayload()
     SetNuiFocus(true, true)
-    SendNUIMessage(payload)
+    SendNUIMessage(rebuildPayload())
 end
 
 function ui.refresh()
-    SendNUIMessage(buildPayload())
+    refreshMenu()
 end
 
 function ui.hide()
@@ -161,23 +42,27 @@ function ui.getOption(optionId)
 end
 
 function ui.selectCategory(categoryId)
+    if session.selectedCategory == categoryId then return end
+
     actions.restoreCommitted()
     session.selectedCategory = categoryId
     session.selectedOption = nil
     session.selectedChoice = nil
-    ui.refresh()
+    refreshMenu()
 end
 
 function ui.selectOption(optionId)
+    if session.selectedOption == optionId then return end
+
     actions.restoreCommitted()
     session.selectedOption = optionId
     session.selectedChoice = nil
-    ui.refresh()
+    refreshMenu()
 end
 
 function ui.previewChoice(optionId, choiceId)
     local option = ui.getOption(optionId)
-    if not option then return end
+    if not option or session.previewChoice == choiceId then return end
 
     for _, choice in ipairs(option.choices) do
         if choice.id == choiceId then
@@ -189,7 +74,7 @@ function ui.previewChoice(optionId, choiceId)
         end
     end
 
-    ui.refresh()
+    refreshMenu()
 end
 
 function ui.installChoice(optionId, choiceId)
@@ -199,6 +84,7 @@ function ui.installChoice(optionId, choiceId)
     for _, choice in ipairs(option.choices) do
         if choice.id == choiceId then
             session.selectedChoice = choiceId
+
             if choice.action == 'repair' then
                 actions.restoreCommitted()
                 actions.repairVehicle(choice.price)
@@ -206,11 +92,12 @@ function ui.installChoice(optionId, choiceId)
                 actions.applyPreview(option, choice)
                 actions.commitChoice(option, choice)
             end
+
             break
         end
     end
 
-    ui.refresh()
+    refreshMenu()
 end
 
 return ui

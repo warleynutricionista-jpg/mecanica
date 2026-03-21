@@ -32,6 +32,7 @@ server_scripts {
 files {
     'locales/*.json',
     'config/*.lua',
+    'shared/**/*.lua',
     'client/**/*.lua',
     'web/index.html',
     'web/app.js',

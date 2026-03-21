@@ -8,6 +8,7 @@ local State = Paintjob.State
 
 local currentBooth = nil
 local targetZones = {}
+local blips = {}
 
 local function drawControlMarker(booth)
     local marker = Config.UI.Marker
@@ -67,6 +68,33 @@ local function removeTargetZones()
     targetZones = {}
 end
 
+local function createBlips()
+    for boothId, booth in ipairs(Config.Locations or {}) do
+        if booth.blip and booth.blip.enabled ~= false then
+            local coords = Utils.toVec3(booth.control)
+            local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
+            SetBlipSprite(blip, booth.blip.sprite or 72)
+            SetBlipDisplay(blip, 4)
+            SetBlipScale(blip, booth.blip.scale or 0.7)
+            SetBlipColour(blip, booth.blip.color or 3)
+            SetBlipAsShortRange(blip, true)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentSubstringPlayerName(booth.blip.label or booth.name or ('Cabine de Pintura %s'):format(boothId))
+            EndTextCommandSetBlipName(blip)
+            blips[#blips + 1] = blip
+        end
+    end
+end
+
+local function removeBlips()
+    for _, blip in ipairs(blips) do
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
+        end
+    end
+    blips = {}
+end
+
 CreateThread(function()
     local busySnapshot = lib.callback.await('mri_Qpaintjob:server:getBusyBooths', false)
     if type(busySnapshot) == 'table' then
@@ -75,6 +103,7 @@ CreateThread(function()
 
     Effects.spawnSprayProps()
     createTargetZones()
+    createBlips()
 
     if Config.UseTarget then return end
 
@@ -115,7 +144,7 @@ CreateThread(function()
             end
 
             if distance <= Utils.getControlRadius(booth) + 0.25 then
-                local helpText = State.busyBooths[currentBooth] and 'Cabine ocupada no momento.' or ('[E] Abrir %s'):format(booth.name or 'cabine de pintura')
+                local helpText = State.busyBooths[currentBooth] and Config.UI.BusyHelp or ('%s • %s'):format(booth.name or 'Cabine de Pintura', Config.UI.ControlHelp)
                 if not textVisible then
                     lib.showTextUI(helpText)
                     textVisible = true
@@ -141,4 +170,5 @@ end)
 RegisterNetEvent('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     removeTargetZones()
+    removeBlips()
 end)

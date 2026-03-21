@@ -6,76 +6,139 @@ local Paint = Paintjob.Paint
 local UI = Paintjob.UI
 
 local MAIN_CONTEXT_ID = 'mri_qpaintjob:main'
-local FINISH_CONTEXT_ID = 'mri_qpaintjob:finish'
+local PREVIEW_CONTEXT_ID = 'mri_qpaintjob:preview'
+
+local function getSession()
+    return Paintjob.State.activeSession
+end
 
 local function sessionMetadata(session)
     return {
         { label = 'Cabine', value = session.boothName },
         { label = 'Veículo', value = Utils.getVehicleDisplayName(session.vehicle) },
-        { label = 'Primária', value = Utils.rgbToHex(session.selection.primary) },
-        { label = 'Secundária', value = Utils.rgbToHex(session.selection.secondary) },
+        { label = 'Primária', value = ('%s • %s'):format(Utils.rgbToHex(session.selection.primary), Utils.rgbSwatch(session.selection.primary)) },
+        { label = 'Secundária', value = ('%s • %s'):format(Utils.rgbToHex(session.selection.secondary), Utils.rgbSwatch(session.selection.secondary)) },
         { label = 'Acabamento', value = Utils.getFinishByValue(session.selection.finish).label },
         { label = 'Preview', value = session.preview and 'Ativado' or 'Desativado' },
     }
 end
 
-local function reopenMainMenu()
-    local session = Paintjob.State.activeSession
-    if not session then return end
-    UI.openMainMenu()
+local function selectionSummary(session)
+    return {
+        { label = 'Cabine', value = session.boothName },
+        { label = 'Veículo', value = Utils.getVehicleDisplayName(session.vehicle) },
+        { label = 'Cor primária', value = Utils.rgbToHex(session.selection.primary) },
+        { label = 'Cor secundária', value = Utils.rgbToHex(session.selection.secondary) },
+        { label = 'Acabamento', value = Utils.getFinishByValue(session.selection.finish).label },
+    }
 end
 
-function UI.openColorDialog(kind)
-    local session = Paintjob.State.activeSession
+local function reopenMainMenu()
+    if getSession() then
+        UI.openMainMenu()
+    end
+end
+
+function UI.openSelectionDialog()
+    local session = getSession()
     if not session then return end
 
-    local current = session.selection[kind]
-    local input = lib.inputDialog(('%s • %s'):format(Config.UI.Title, kind == 'primary' and 'Pintura Primária' or 'Pintura Secundária'), {
+    local response = lib.inputDialog(('%s • Configuração Premium'):format(Config.UI.Title), {
         {
             type = 'color',
-            label = 'Selecionar cor',
-            default = Utils.rgbToHex(current),
+            label = 'Pintura primária',
+            description = 'Selecione a cor principal da carroceria.',
+            default = Utils.rgbToHex(session.selection.primary),
             required = true,
+        },
+        {
+            type = 'color',
+            label = 'Pintura secundária',
+            description = 'Selecione a cor secundária e detalhes.',
+            default = Utils.rgbToHex(session.selection.secondary),
+            required = true,
+        },
+        {
+            type = 'select',
+            label = 'Acabamento',
+            description = 'Escolha o acabamento final da pintura.',
+            options = Utils.getFinishOptions(),
+            default = session.selection.finish,
+            required = true,
+        },
+        {
+            type = 'checkbox',
+            label = 'Ativar preview ao salvar',
+            description = 'Mostra a nova cor no veículo antes da confirmação final.',
+            checked = session.preview,
         },
     })
 
-    if not input then
+    if not response then
         return reopenMainMenu()
     end
 
-    Paint.updateSelection(kind, Utils.hexToRgb(input[1]))
-    reopenMainMenu()
+    Paint.updateSelection('primary', Utils.hexToRgb(response[1]))
+    Paint.updateSelection('secondary', Utils.hexToRgb(response[2]))
+    Paint.updateSelection('finish', tonumber(response[3]) or session.selection.finish)
+    Paint.setPreviewEnabled(response[4] == true)
+
+    UI.openPreviewMenu()
 end
 
-function UI.openFinishMenu()
-    local session = Paintjob.State.activeSession
+function UI.openPreviewMenu()
+    local session = getSession()
     if not session then return end
 
-    local options = {}
-    for _, finish in ipairs(Config.FinishTypes or {}) do
-        options[#options + 1] = {
-            title = finish.label,
-            description = finish.description,
-            icon = session.selection.finish == finish.value and 'circle-check' or 'circle',
-            onSelect = function()
-                Paint.updateSelection('finish', finish.value)
-                reopenMainMenu()
-            end,
-        }
-    end
-
     lib.registerContext({
-        id = FINISH_CONTEXT_ID,
-        title = 'Escolher acabamento',
+        id = PREVIEW_CONTEXT_ID,
+        title = 'Revisão da Pintura',
         menu = MAIN_CONTEXT_ID,
-        options = options,
+        options = {
+            {
+                title = 'Resumo da aplicação',
+                description = 'Confira as cores e o acabamento antes de iniciar a cabine.',
+                icon = 'car-side',
+                readOnly = true,
+                metadata = selectionSummary(session),
+            },
+            {
+                title = session.preview and 'Ocultar preview' or 'Mostrar preview',
+                description = 'Alterna a visualização prévia sem perder a seleção atual.',
+                icon = session.preview and 'eye-slash' or 'eye',
+                onSelect = function()
+                    Paint.togglePreview()
+                    UI.openPreviewMenu()
+                end,
+            },
+            {
+                title = 'Editar seleção',
+                description = 'Voltar para alterar cor primária, secundária ou acabamento.',
+                icon = 'sliders',
+                onSelect = UI.openSelectionDialog,
+            },
+            {
+                title = 'Iniciar pintura premium',
+                description = 'Confirma, bloqueia a cabine e executa o processo completo.',
+                icon = 'circle-check',
+                iconColor = 'green',
+                onSelect = function()
+                    Paintjob.State.suppressContextExit = true
+                    lib.hideContext(true)
+                    local finished = Paint.startProcess()
+                    if not finished and getSession() then
+                        UI.openMainMenu()
+                    end
+                end,
+            },
+        },
     })
 
-    lib.showContext(FINISH_CONTEXT_ID)
+    lib.showContext(PREVIEW_CONTEXT_ID)
 end
 
 function UI.openMainMenu()
-    local session = Paintjob.State.activeSession
+    local session = getSession()
     if not session then return end
 
     lib.registerContext({
@@ -87,75 +150,33 @@ function UI.openMainMenu()
                 Paintjob.State.suppressContextExit = false
                 return
             end
-            if Paintjob.State.activeSession then
+            if getSession() then
                 Paint.cancelSession('cancelada')
             end
         end,
         options = {
             {
                 title = session.boothName,
-                description = 'Painel premium da cabine de pintura',
+                description = Config.UI.Subtitle,
                 icon = Config.UI.Icon,
                 readOnly = true,
                 metadata = sessionMetadata(session),
             },
             {
-                title = 'Pintura primária',
-                description = 'Escolha a cor principal da carroceria.',
+                title = 'Configurar pintura',
+                description = 'Escolha pintura primária, secundária, acabamento e preview.',
                 icon = 'palette',
-                metadata = {
-                    { label = 'Cor atual', value = Utils.rgbToHex(session.selection.primary) },
-                },
-                onSelect = function()
-                    UI.openColorDialog('primary')
-                end,
+                onSelect = UI.openSelectionDialog,
             },
             {
-                title = 'Pintura secundária',
-                description = 'Escolha a cor secundária e detalhes.',
-                icon = 'fill-drip',
-                metadata = {
-                    { label = 'Cor atual', value = Utils.rgbToHex(session.selection.secondary) },
-                },
-                onSelect = function()
-                    UI.openColorDialog('secondary')
-                end,
+                title = 'Revisar preview',
+                description = 'Abrir resumo visual e validar o resultado antes de aplicar.',
+                icon = 'magnifying-glass',
+                onSelect = UI.openPreviewMenu,
             },
             {
-                title = 'Acabamento',
-                description = 'Normal, metálico, perolado, fosco, metalizado ou cromado.',
-                icon = 'wand-magic-sparkles',
-                metadata = {
-                    { label = 'Selecionado', value = Utils.getFinishByValue(session.selection.finish).label },
-                },
-                onSelect = UI.openFinishMenu,
-            },
-            {
-                title = session.preview and 'Desativar preview' or 'Ativar preview',
-                description = 'Visualize a pintura no veículo antes da confirmação final.',
-                icon = session.preview and 'eye-slash' or 'eye',
-                onSelect = function()
-                    Paint.togglePreview()
-                    reopenMainMenu()
-                end,
-            },
-            {
-                title = 'Confirmar pintura',
-                description = 'Iniciar processo completo de pintura da cabine.',
-                icon = 'circle-check',
-                iconColor = 'green',
-                onSelect = function()
-                    Paintjob.State.suppressContextExit = true
-                    lib.hideContext(true)
-                    local finished = Paint.startProcess()
-                    if not finished and Paintjob.State.activeSession then
-                        UI.openMainMenu()
-                    end
-                end,
-            },
-            {
-                title = 'Cancelar',
-                description = 'Liberar a cabine e restaurar o veículo original.',
+                title = 'Cancelar sessão',
+                description = 'Libera a cabine, limpa efeitos e restaura o veículo original.',
                 icon = 'ban',
                 iconColor = 'red',
                 onSelect = function()

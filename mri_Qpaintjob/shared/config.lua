@@ -2,8 +2,9 @@ Config = Config or {}
 
 Config.UseTarget = true
 Config.SprayModel = 'prop_tool_nailgun'
-Config.PaintDuration = 9000
+Config.PaintDuration = 12000
 Config.SessionTimeout = 180
+Config.SessionHeartbeatInterval = 15
 Config.ReleaseDistance = 30.0
 Config.DefaultVehicleRadius = 3.2
 Config.DefaultControlRadius = 1.6
@@ -12,11 +13,14 @@ Config.Debug = false
 
 Config.UI = {
     Title = 'Cabine de Pintura',
+    Subtitle = 'Sistema premium de repintura automotiva',
     Icon = 'spray-can-sparkles',
     Position = 'top-right',
     PreviewEnabledByDefault = true,
     SessionBreakDistance = 25.0,
     ProgressLabel = 'Aplicando pintura premium...',
+    ControlHelp = '[E] Abrir cabine de pintura',
+    BusyHelp = 'Cabine ocupada no momento.',
     Marker = {
         type = 27,
         scale = vec3(1.25, 1.25, 0.45),
@@ -26,6 +30,18 @@ Config.UI = {
         enabled = true,
         fov = 42.0,
         easeTime = 600,
+    },
+    Sounds = {
+        enabled = true,
+        start = { name = 'SELECT', set = 'HUD_FRONTEND_DEFAULT_SOUNDSET' },
+        success = { name = 'CHECKPOINT_PERFECT', set = 'HUD_MINI_GAME_SOUNDSET' },
+        cancel = { name = 'BACK', set = 'HUD_FRONTEND_DEFAULT_SOUNDSET' },
+        error = { name = 'ERROR', set = 'HUD_FRONTEND_DEFAULT_SOUNDSET' },
+    },
+    Confirmation = {
+        centered = true,
+        confirmLabel = 'Iniciar pintura',
+        cancelLabel = 'Voltar',
     },
 }
 

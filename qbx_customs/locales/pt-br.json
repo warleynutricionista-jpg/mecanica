@@ -1,98 +1,95 @@
 {
   "notifications": {
     "success": {
-      "repaired": "Veículo consertado!",
-      "paid": "Você pagou $%s da sua conta bancária"
+      "installed": "Modificação aplicada e persistida com sucesso.",
+      "paid": "Você pagou $%s via %s.",
+      "bankAccount": "banco",
+      "cashAccount": "dinheiro"
     },
     "error": {
-      "money": "Você não tem dinheiro suficiente!",
-      "alreadyInstalled": "Você já instalou esta modificação.",
-      "driverSeat": "Você precisa estar no banco do motorista para abrir a customização.",
+      "money": "Você não tem dinheiro suficiente para esta modificação.",
+      "driverSeat": "Você precisa estar no banco do motorista para abrir o customs.",
       "invalidVehicle": "O veículo não está mais disponível para customização.",
-      "busy": "A customização já está aberta.",
-      "focusLost": "A customização foi fechada porque a interface perdeu o foco.",
-      "applyFailed": "Não foi possível pré-visualizar a modificação com segurança."
-    },
-    "props": {
-      "installTitle": "Customizações"
+      "busy": "Já existe uma sessão de customs ativa para você.",
+      "applyFailed": "Falha ao gerar o preview desta modificação.",
+      "notPersisted": "Este veículo não foi encontrado na persistência da base Qbox.",
+      "sessionMissing": "A sessão do customs não existe mais no servidor.",
+      "saveFailed": "A cobrança foi revertida porque a persistência falhou.",
+      "noAccess": "Você não tem permissão para usar este customs.",
+      "noZone": "Você não está em uma zona válida do customs."
     }
   },
-  "dragCam": {
-    "zoomIn": "Aumentar zoom",
-    "zoomOut": "Diminuir zoom",
-    "toggleDoors": "Alternar portas",
-    "changeView": "Alternar visão em primeira pessoa"
-  },
   "textUI": {
-    "tune": "Pressione [E] para abrir o menu"
+    "tune": "Pressione [E] para abrir o customs"
   },
   "menus": {
     "main": {
-      "title": "qbx Customs",
-      "repair": "Reparo completo"
+      "title": "QBX Customs",
+      "repair": "Reparo completo",
+      "repairGroup": "Serviços"
     },
     "performance": {
       "title": "Performance",
-      "turbo": "Turbo",
-      "toggleState": "%s %s"
+      "turbo": "Turbo"
     },
     "wheels": {
       "title": "Rodas",
-      "bikeRear": "Roda traseira da moto",
-      "installed": "%s %s instalado"
+      "bikeRear": "Roda traseira"
     },
     "neon": {
       "title": "Neon",
-      "neon": "Neon %s%s",
       "color": "Cor do neon",
-      "installed": "Neon %s instalado"
+      "side": "Neon %s"
+    },
+    "extras": {
+      "title": "Extras"
     },
     "options": {
       "livery": "Livery",
+      "liveryGroup": "Visual",
       "plateIndex": {
-        "title": "Índice da placa",
-        "installed": "Placa %s instalada"
+        "title": "Estilo da placa",
+        "group": "Placas"
       },
       "windowTint": {
-        "title": "Película dos vidros",
-        "installed": "%s aplicado"
+        "title": "Película",
+        "group": "Vidros"
       },
       "xenon": {
-        "title": "Faróis de xenon",
-        "installed": "Xenon %s instalado"
+        "title": "Xenon",
+        "group": "Iluminação"
       }
     },
     "general": {
       "stock": "Original",
       "enabled": "Ativado",
       "disabled": "Desativado",
-      "installed": "%s instalado",
-      "applied": "%s aplicado"
+      "variant": "Variação"
     }
   },
   "ui": {
-    "catalog": "Catálogo",
     "sessionTotal": "Total da sessão",
-    "selectedPrice": "Preço do item",
+    "selectedPrice": "Preço",
+    "status": "Status",
     "statusInstalled": "Instalado",
     "statusAvailable": "Disponível",
     "statusBlocked": "Bloqueado",
     "unavailable": "Indisponível",
-    "noOptions": "Nenhuma opção compatível foi encontrada para esta categoria.",
-    "noChoices": "Selecione uma peça para ver as variações disponíveis.",
-    "emptyCategory": "Categoria vazia ou incompatível com este veículo.",
+    "emptyCategory": "Nenhuma opção compatível foi encontrada nesta categoria.",
+    "noChoices": "Nenhuma escolha compatível disponível.",
     "apply": "Aplicar",
-    "preview": "Preview automático ao focar.",
     "close": "Fechar",
-    "hint": "Passe o mouse ou use TAB para visualizar, clique em aplicar para confirmar.",
-    "installedHint": "Já instalado no veículo.",
-    "actionHint": "Ação direta para este serviço.",
     "repairNow": "Executar reparo",
-    "unknown": "Desconhecido",
+    "previewFallback": "Preview",
+    "cancelPreview": "Cancelar preview",
+    "restorePreview": "Restaurar o estado confirmado do veículo.",
+    "actionHint": "Ação imediata protegida por validação e cobrança no servidor.",
     "variations": "variações",
-    "previewFallback": "Preview"
+    "unknown": "Desconhecido",
+    "free": "Grátis"
   },
   "general": {
-    "payReason": "Customizações"
+    "payReason": "customs",
+    "refundReason": "estorno customs"
   }
 }

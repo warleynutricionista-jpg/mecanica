@@ -2,104 +2,123 @@ local session = require 'client.session'
 
 local vehicle = {}
 
-local function getCurrentVehicle()
+local function currentVehicle()
     return session.vehicle
 end
 
-local function withCurrentVehicle(callback)
-    local targetVehicle = getCurrentVehicle()
+local function ensureModKit(targetVehicle)
+    if targetVehicle and targetVehicle ~= 0 and DoesEntityExist(targetVehicle) then
+        SetVehicleModKit(targetVehicle, 0)
+    end
+end
+
+local function withVehicle(callback)
+    local targetVehicle = currentVehicle()
     if not vehicle.isValid(targetVehicle) then
         return false
     end
 
-    SetVehicleModKit(targetVehicle, 0)
+    ensureModKit(targetVehicle)
     callback(targetVehicle)
     return true
 end
 
-function vehicle.get()
-    return getCurrentVehicle()
+function vehicle.isValid(targetVehicle)
+    return targetVehicle and targetVehicle ~= 0 and DoesEntityExist(targetVehicle) and IsEntityAVehicle(targetVehicle)
 end
 
-function vehicle.isValid(targetVehicle)
-    return targetVehicle and targetVehicle ~= 0 and DoesEntityExist(targetVehicle)
+function vehicle.get()
+    return currentVehicle()
 end
 
 function vehicle.set(targetVehicle)
     session.vehicle = targetVehicle
     session.vehicleNetId = vehicle.isValid(targetVehicle) and NetworkGetNetworkIdFromEntity(targetVehicle) or 0
-
-    if vehicle.isValid(targetVehicle) then
-        SetVehicleModKit(targetVehicle, 0)
-    end
+    ensureModKit(targetVehicle)
 end
 
-function vehicle.captureCommittedProps()
-    return withCurrentVehicle(function(targetVehicle)
-        session.committedProps = lib.getVehicleProperties(targetVehicle)
-        session.setLastAppliedState(session.committedProps)
+function vehicle.getPlate(targetVehicle)
+    local plate = GetVehicleNumberPlateText(targetVehicle or currentVehicle())
+    if not plate then
+        return nil
+    end
 
+    return (plate:gsub('^%s*(.-)%s*$', '%1'))
+end
+
+function vehicle.captureCommitted()
+    return withVehicle(function(targetVehicle)
+        local props = lib.getVehicleProperties(targetVehicle)
+        session.committedProps = props
         if not session.originalProps then
-            session.originalProps = table.clone(session.committedProps)
+            session.originalProps = table.clone(props)
         end
     end)
 end
 
 function vehicle.restoreProperties(props)
-    if not props then
+    if type(props) ~= 'table' then
         return false
     end
 
-    return withCurrentVehicle(function(targetVehicle)
+    return withVehicle(function(targetVehicle)
         lib.setVehicleProperties(targetVehicle, props)
+        ensureModKit(targetVehicle)
     end)
 end
 
 function vehicle.restoreCommitted()
     local restored = vehicle.restoreProperties(session.committedProps)
     if restored then
-        session.setLastAppliedState(session.committedProps)
         session.clearPreview()
     end
-
     return restored
 end
 
 function vehicle.restoreOriginal()
-    if not session.originalProps then
-        return false
-    end
-
     local restored = vehicle.restoreProperties(session.originalProps)
     if restored then
-        session.committedProps = table.clone(session.originalProps)
-        session.setLastAppliedState(session.committedProps)
+        session.committedProps = session.originalProps and table.clone(session.originalProps) or nil
         session.clearPreview()
     end
-
     return restored
 end
 
-function vehicle.applyRepairState()
-    return withCurrentVehicle(function(targetVehicle)
+function vehicle.getProps()
+    local targetVehicle = currentVehicle()
+    if not vehicle.isValid(targetVehicle) then
+        return nil
+    end
+
+    ensureModKit(targetVehicle)
+    return lib.getVehicleProperties(targetVehicle)
+end
+
+function vehicle.applyRepairPreview()
+    return withVehicle(function(targetVehicle)
         local fuelLevel = GetVehicleFuelLevel(targetVehicle)
         local dirtLevel = GetVehicleDirtLevel(targetVehicle)
 
-        SetVehicleBodyHealth(targetVehicle, 1000.0)
-        SetVehicleEngineHealth(targetVehicle, 1000.0)
-        SetVehiclePetrolTankHealth(targetVehicle, 1000.0)
         SetVehicleFixed(targetVehicle)
         SetVehicleDeformationFixed(targetVehicle)
         SetVehicleUndriveable(targetVehicle, false)
         SetVehicleEngineOn(targetVehicle, true, true, false)
+        SetVehicleBodyHealth(targetVehicle, 1000.0)
+        SetVehicleEngineHealth(targetVehicle, 1000.0)
+        SetVehiclePetrolTankHealth(targetVehicle, 1000.0)
         SetVehicleFuelLevel(targetVehicle, fuelLevel)
         SetVehicleDirtLevel(targetVehicle, dirtLevel)
     end)
 end
 
-function vehicle.isDriveable()
-    local targetVehicle = getCurrentVehicle()
-    return vehicle.isValid(targetVehicle) and not IsEntityDead(targetVehicle)
+function vehicle.isDriver(targetVehicle)
+    targetVehicle = targetVehicle or currentVehicle()
+    return vehicle.isValid(targetVehicle) and GetPedInVehicleSeat(targetVehicle, -1) == cache.ped
+end
+
+function vehicle.isDestroyed(targetVehicle)
+    targetVehicle = targetVehicle or currentVehicle()
+    return not vehicle.isValid(targetVehicle) or IsEntityDead(targetVehicle)
 end
 
 return vehicle

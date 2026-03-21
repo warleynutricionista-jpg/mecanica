@@ -8,7 +8,10 @@
       "money": "Você não tem dinheiro suficiente!",
       "alreadyInstalled": "Você já instalou esta modificação.",
       "driverSeat": "Você precisa estar no banco do motorista para abrir a customização.",
-      "invalidVehicle": "O veículo não está mais disponível para customização."
+      "invalidVehicle": "O veículo não está mais disponível para customização.",
+      "busy": "A customização já está aberta.",
+      "focusLost": "A customização foi fechada porque a interface perdeu o foco.",
+      "applyFailed": "Não foi possível pré-visualizar a modificação com segurança."
     },
     "props": {
       "installTitle": "Customizações"
@@ -85,7 +88,9 @@
     "installedHint": "Já instalado no veículo.",
     "actionHint": "Ação direta para este serviço.",
     "repairNow": "Executar reparo",
-    "unknown": "Desconhecido"
+    "unknown": "Desconhecido",
+    "variations": "variações",
+    "previewFallback": "Preview"
   },
   "general": {
     "payReason": "Customizações"

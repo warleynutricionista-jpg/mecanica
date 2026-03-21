@@ -7,6 +7,10 @@ local common = require 'client.catalog_builder.common'
 
 local builders = {}
 
+local function cosmeticPrice()
+    return actions.getPrice('cosmetic')
+end
+
 local function isWheelTypeAllowed(wheelType)
     local class = GetVehicleClass(session.vehicle)
     if class == VehicleClass.Cycles then return false end
@@ -16,7 +20,76 @@ local function isWheelTypeAllowed(wheelType)
     if class == VehicleClass.OpenWheels then
         return wheelType == WheelType.OpenWheel
     end
+
     return true
+end
+
+local function resolveWheelLabel(vehicle, modType, index, fallback)
+    local textLabel = GetModTextLabel(vehicle, modType, index)
+    if not textLabel or textLabel == '' then
+        return fallback
+    end
+
+    local label = GetLabelText(textLabel)
+    if not label or label == 'NULL' then
+        return fallback
+    end
+
+    return label
+end
+
+local function buildFrontWheelChoices(vehicle, wheelType, wheelLabel, currentFront, currentWheelType, modCount)
+    local choices = {}
+    local price = cosmeticPrice()
+
+    for index = 0, modCount - 1 do
+        local label = resolveWheelLabel(vehicle, 23, index, ('%s %d'):format(wheelLabel, index + 1))
+        choices[#choices + 1] = common.createChoice(
+            ('wheel:%s:%s'):format(wheelType, index),
+            label,
+            currentWheelType == wheelType and currentFront == index,
+            price,
+            function(targetVehicle)
+                SetVehicleWheelType(targetVehicle, wheelType)
+                SetVehicleMod(targetVehicle, 23, index, false)
+                if GetVehicleClass(targetVehicle) ~= VehicleClass.Motorcycles then
+                    SetVehicleMod(targetVehicle, 24, -1, false)
+                end
+            end,
+            locale('menus.wheels.installed', wheelLabel, label),
+            index + 1
+        )
+    end
+
+    return choices
+end
+
+local function buildRearBikeChoices(vehicle, currentRear)
+    local modCount = GetNumVehicleMods(vehicle, 24)
+    if modCount <= 0 then
+        return nil
+    end
+
+    local price = cosmeticPrice()
+    local choices = {}
+
+    for index = 0, modCount - 1 do
+        local label = resolveWheelLabel(vehicle, 24, index, ('%s %d'):format(locale('menus.wheels.bikeRear'), index + 1))
+        choices[#choices + 1] = common.createChoice(
+            ('wheelrear:%s'):format(index),
+            label,
+            currentRear == index,
+            price,
+            function(targetVehicle)
+                SetVehicleWheelType(targetVehicle, WheelType.Bike)
+                SetVehicleMod(targetVehicle, 24, index, false)
+            end,
+            locale('menus.wheels.installed', locale('menus.wheels.bikeRear'), label),
+            index + 1
+        )
+    end
+
+    return common.createOption('wheelcat:rear', locale('menus.wheels.bikeRear'), '◎', 'BikeWheel', 'Rodas', price, 'cosmetic', choices)
 end
 
 function builders.buildWheelOptions()
@@ -33,42 +106,16 @@ function builders.buildWheelOptions()
         local modCount = GetNumVehicleMods(vehicle, 23)
         if modCount <= 0 then goto continue end
 
-        local choices = {}
-        for index = 0, modCount - 1 do
-            local textLabel = GetModTextLabel(vehicle, 23, index)
-            local label = textLabel and GetLabelText(textLabel) or nil
-            if not label or label == 'NULL' then
-                label = ('%s %d'):format(wheel.label, index + 1)
-            end
-
-            choices[#choices + 1] = common.createChoice(
-                ('wheel:%s:%s'):format(wheel.id, index),
-                label,
-                originalWheelType == wheel.id and currentFront == index,
-                actions.getPrice('cosmetic'),
-                function(targetVehicle)
-                    SetVehicleWheelType(targetVehicle, wheel.id)
-                    SetVehicleMod(targetVehicle, 23, index, false)
-                    if GetVehicleClass(targetVehicle) ~= VehicleClass.Motorcycles then
-                        SetVehicleMod(targetVehicle, 24, -1, false)
-                    end
-                end,
-                locale('menus.wheels.installed', wheel.label, label),
-                index + 1
-            )
-        end
-
-        options[#options + 1] = {
-            id = ('wheelcat:%s'):format(wheel.id),
-            label = wheel.label,
-            icon = '◎',
-            asset = 'WheelType',
-            group = 'Rodas',
-            price = actions.getPrice('cosmetic'),
-            priceMod = 'cosmetic',
-            choices = choices,
-            disabled = false,
-        }
+        options[#options + 1] = common.createOption(
+            ('wheelcat:%s'):format(wheel.id),
+            wheel.label,
+            '◎',
+            'WheelType',
+            'Rodas',
+            cosmeticPrice(),
+            'cosmetic',
+            buildFrontWheelChoices(vehicle, wheel.id, wheel.label, currentFront, originalWheelType, modCount)
+        )
 
         ::continue::
     end
@@ -78,41 +125,9 @@ function builders.buildWheelOptions()
     SetVehicleMod(vehicle, 24, currentRear, false)
 
     if GetVehicleClass(vehicle) == VehicleClass.Motorcycles and currentRear >= -1 then
-        local modCount = GetNumVehicleMods(vehicle, 24)
-        if modCount > 0 then
-            local choices = {}
-            for index = 0, modCount - 1 do
-                local textLabel = GetModTextLabel(vehicle, 24, index)
-                local label = textLabel and GetLabelText(textLabel) or nil
-                if not label or label == 'NULL' then
-                    label = ('%s %d'):format(locale('menus.wheels.bikeRear'), index + 1)
-                end
-
-                choices[#choices + 1] = common.createChoice(
-                    ('wheelrear:%s'):format(index),
-                    label,
-                    currentRear == index,
-                    actions.getPrice('cosmetic'),
-                    function(targetVehicle)
-                        SetVehicleWheelType(targetVehicle, WheelType.Bike)
-                        SetVehicleMod(targetVehicle, 24, index, false)
-                    end,
-                    locale('menus.wheels.installed', locale('menus.wheels.bikeRear'), label),
-                    index + 1
-                )
-            end
-
-            options[#options + 1] = {
-                id = 'wheelcat:rear',
-                label = locale('menus.wheels.bikeRear'),
-                icon = '◎',
-                asset = 'BikeWheel',
-                group = 'Rodas',
-                price = actions.getPrice('cosmetic'),
-                priceMod = 'cosmetic',
-                choices = choices,
-                disabled = false,
-            }
+        local rearWheelOption = buildRearBikeChoices(vehicle, currentRear)
+        if rearWheelOption then
+            options[#options + 1] = rearWheelOption
         end
     end
 

@@ -17,38 +17,66 @@ local function summarizeChoice(choice)
     }
 end
 
+local function getFirstEnabledCategory(runtimeCatalog)
+    for i = 1, #runtimeCatalog.categories do
+        local category = runtimeCatalog.categories[i]
+        if category.enabled then
+            return category
+        end
+    end
+
+    return runtimeCatalog.categories[1]
+end
+
 local function ensureSelection(runtimeCatalog)
-    local selectedCategory = session.selectedCategory
     local currentCategory
+    local currentOption
 
-    for _, category in ipairs(runtimeCatalog.categories) do
-        if category.enabled and not selectedCategory then
-            selectedCategory = category.id
-        end
-
-        if category.id == selectedCategory then
+    for i = 1, #runtimeCatalog.categories do
+        local category = runtimeCatalog.categories[i]
+        if category.id == session.selectedCategory then
             currentCategory = category
+            break
         end
     end
 
-    session.selectedCategory = selectedCategory
-
-    if currentCategory and (not session.selectedOption or not runtimeCatalog.options[session.selectedOption]) then
-        session.selectedOption = currentCategory.options[1] and currentCategory.options[1].id or nil
+    if not currentCategory or not currentCategory.enabled then
+        currentCategory = getFirstEnabledCategory(runtimeCatalog)
+        session.selectedCategory = currentCategory and currentCategory.id or nil
     end
 
-    local currentOption = session.selectedOption and runtimeCatalog.options[session.selectedOption] or nil
-    if currentOption and not session.selectedChoice then
-        for _, choice in ipairs(currentOption.choices) do
-            if choice.installed then
-                session.selectedChoice = choice.id
+    if currentCategory then
+        currentOption = session.selectedOption and runtimeCatalog.options[session.selectedOption] or nil
+        if not currentOption then
+            currentOption = currentCategory.options[1] or nil
+            session.selectedOption = currentOption and currentOption.id or nil
+        end
+    else
+        session.selectedOption = nil
+    end
+
+    if currentOption then
+        local resolvedChoiceId = nil
+
+        for i = 1, #currentOption.choices do
+            local choice = currentOption.choices[i]
+            if choice.id == session.selectedChoice then
+                resolvedChoiceId = choice.id
                 break
+            end
+
+            if not resolvedChoiceId and choice.installed then
+                resolvedChoiceId = choice.id
             end
         end
 
-        if not session.selectedChoice and currentOption.choices[1] then
-            session.selectedChoice = currentOption.choices[1].id
+        if not resolvedChoiceId and currentOption.choices[1] then
+            resolvedChoiceId = currentOption.choices[1].id
         end
+
+        session.selectedChoice = resolvedChoiceId
+    else
+        session.selectedChoice = nil
     end
 
     return currentCategory, currentOption
@@ -57,7 +85,8 @@ end
 local function buildCategories(runtimeCatalog)
     local categoriesPayload = {}
 
-    for _, category in ipairs(runtimeCatalog.categories) do
+    for i = 1, #runtimeCatalog.categories do
+        local category = runtimeCatalog.categories[i]
         categoriesPayload[#categoriesPayload + 1] = {
             id = category.id,
             label = category.label,
@@ -76,11 +105,13 @@ local function buildOptions(currentCategory)
     local optionsPayload = {}
     if not currentCategory then return optionsPayload end
 
-    for _, option in ipairs(currentCategory.options) do
+    for i = 1, #currentCategory.options do
+        local option = currentCategory.options[i]
         local installedLabel = locale('ui.unavailable')
         local installed = false
 
-        for _, choice in ipairs(option.choices) do
+        for choiceIndex = 1, #option.choices do
+            local choice = option.choices[choiceIndex]
             if choice.installed then
                 installed = true
                 installedLabel = choice.label
@@ -114,10 +145,12 @@ local function buildChoices(currentOption)
         return choicesPayload, selectedPrice
     end
 
-    for _, choice in ipairs(currentOption.choices) do
+    for i = 1, #currentOption.choices do
+        local choice = currentOption.choices[i]
         if choice.id == session.selectedChoice then
             selectedPrice = choice.price or 0
         end
+
         choicesPayload[#choicesPayload + 1] = summarizeChoice(choice)
     end
 
@@ -162,6 +195,8 @@ function payload.build()
                 hint = locale('ui.hint'),
                 installedHint = locale('ui.installedHint'),
                 actionHint = locale('ui.actionHint'),
+                variations = locale('ui.variations'),
+                previewFallback = locale('ui.previewFallback'),
             }
         }
     }

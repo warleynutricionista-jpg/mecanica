@@ -5,93 +5,88 @@ local common = require 'client.catalog_builder.common'
 
 local builders = {}
 
-function builders.buildWindowTintOption()
-    local current = GetVehicleWindowTint(session.vehicle)
+local function cosmeticPrice()
+    return actions.getPrice('cosmetic')
+end
+
+local function buildSimpleChoices(items, currentId, idPrefix, applyCallback, successLocalePath)
+    local price = cosmeticPrice()
     local choices = {}
 
-    for index, tint in ipairs(config.windowTints) do
+    for index, item in ipairs(items) do
         choices[#choices + 1] = common.createChoice(
-            ('window:%s'):format(tint.id),
-            tint.label,
-            current == tint.id,
-            actions.getPrice('cosmetic'),
+            ('%s:%s'):format(idPrefix, item.id),
+            item.label,
+            currentId == item.id,
+            price,
             function(targetVehicle)
-                SetVehicleWindowTint(targetVehicle, tint.id)
+                applyCallback(targetVehicle, item)
             end,
-            locale('menus.options.windowTint.installed', tint.label),
+            locale(successLocalePath, item.label),
             index
         )
     end
 
-    return {
-        id = 'window_tint',
-        label = locale('menus.options.windowTint.title'),
-        icon = '◪',
-        asset = 'window',
-        group = 'Vidros',
-        price = actions.getPrice('cosmetic'),
-        priceMod = 'cosmetic',
-        choices = choices,
-        disabled = false,
-    }
+    return choices
+end
+
+function builders.buildWindowTintOption()
+    local current = GetVehicleWindowTint(session.vehicle)
+    return common.createOption(
+        'window_tint',
+        locale('menus.options.windowTint.title'),
+        '◪',
+        'window',
+        'Vidros',
+        cosmeticPrice(),
+        'cosmetic',
+        buildSimpleChoices(config.windowTints, current, 'window', function(targetVehicle, tint)
+            SetVehicleWindowTint(targetVehicle, tint.id)
+        end, 'menus.options.windowTint.installed')
+    )
 end
 
 function builders.buildPlateIndexOption()
     local current = GetVehicleNumberPlateTextIndex(session.vehicle)
-    local choices = {}
-
-    for index, plate in ipairs(config.plateIndexes) do
-        choices[#choices + 1] = common.createChoice(
-            ('plateindex:%s'):format(plate.id),
-            plate.label,
-            current == plate.id,
-            actions.getPrice('cosmetic'),
-            function(targetVehicle)
-                SetVehicleNumberPlateTextIndex(targetVehicle, plate.id)
-            end,
-            locale('menus.options.plateIndex.installed', plate.label),
-            index
-        )
-    end
-
-    return {
-        id = 'plate_index',
-        label = locale('menus.options.plateIndex.title'),
-        icon = '▣',
-        asset = 'plate',
-        group = 'Placas',
-        price = actions.getPrice('cosmetic'),
-        priceMod = 'cosmetic',
-        choices = choices,
-        disabled = false,
-    }
+    return common.createOption(
+        'plate_index',
+        locale('menus.options.plateIndex.title'),
+        '▣',
+        'plate',
+        'Placas',
+        cosmeticPrice(),
+        'cosmetic',
+        buildSimpleChoices(config.plateIndexes, current, 'plateindex', function(targetVehicle, plate)
+            SetVehicleNumberPlateTextIndex(targetVehicle, plate.id)
+        end, 'menus.options.plateIndex.installed')
+    )
 end
 
 function builders.buildExtrasOptions()
     local options = {}
+    local price = cosmeticPrice()
 
     for extra = 1, 14 do
         if not DoesExtraExist(session.vehicle, extra) then goto continue end
 
         local isEnabled = IsVehicleExtraTurnedOn(session.vehicle, extra)
-        options[#options + 1] = {
-            id = ('extra:%s'):format(extra),
-            label = ('Extra %d'):format(extra),
-            icon = '⋯',
-            asset = 'extra',
-            group = 'Extras',
-            price = actions.getPrice('cosmetic'),
-            priceMod = 'cosmetic',
-            choices = {
-                common.createChoice(('extra:%s:on'):format(extra), locale('menus.general.enabled'), isEnabled, actions.getPrice('cosmetic'), function(targetVehicle)
+        options[#options + 1] = common.createOption(
+            ('extra:%s'):format(extra),
+            ('Extra %d'):format(extra),
+            '⋯',
+            'extra',
+            'Extras',
+            price,
+            'cosmetic',
+            {
+                common.createChoice(('extra:%s:on'):format(extra), locale('menus.general.enabled'), isEnabled, price, function(targetVehicle)
                     SetVehicleExtra(targetVehicle, extra, 0)
                 end, locale('menus.performance.toggleState', ('Extra %d'):format(extra), locale('menus.general.enabled')), 2),
-                common.createChoice(('extra:%s:off'):format(extra), locale('menus.general.disabled'), not isEnabled, actions.getPrice('cosmetic'), function(targetVehicle)
+                common.createChoice(('extra:%s:off'):format(extra), locale('menus.general.disabled'), not isEnabled, price, function(targetVehicle)
                     SetVehicleExtra(targetVehicle, extra, 1)
                 end, locale('menus.performance.toggleState', ('Extra %d'):format(extra), locale('menus.general.disabled')), 1),
-            },
-            disabled = false,
-        }
+            }
+        )
 
         ::continue::
     end
@@ -102,27 +97,27 @@ end
 
 function builders.buildNeonOptions()
     local options = {}
+    local price = cosmeticPrice()
 
     for _, neon in ipairs(config.neon) do
         local enabled = IsVehicleNeonLightEnabled(session.vehicle, neon.id)
-        options[#options + 1] = {
-            id = ('neon_side:%s'):format(neon.id),
-            label = locale('menus.neon.neon', neon.label, ''),
-            icon = '✦',
-            asset = 'neon',
-            group = 'Neon',
-            price = actions.getPrice('cosmetic'),
-            priceMod = 'cosmetic',
-            choices = {
-                common.createChoice(('neon_side:%s:off'):format(neon.id), locale('menus.general.disabled'), not enabled, actions.getPrice('cosmetic'), function(targetVehicle)
+        options[#options + 1] = common.createOption(
+            ('neon_side:%s'):format(neon.id),
+            locale('menus.neon.neon', neon.label, ''),
+            '✦',
+            'neon',
+            'Neon',
+            price,
+            'cosmetic',
+            {
+                common.createChoice(('neon_side:%s:off'):format(neon.id), locale('menus.general.disabled'), not enabled, price, function(targetVehicle)
                     SetVehicleNeonLightEnabled(targetVehicle, neon.id, false)
                 end, locale('menus.performance.toggleState', neon.label, locale('menus.general.disabled')), 1),
-                common.createChoice(('neon_side:%s:on'):format(neon.id), locale('menus.general.enabled'), enabled, actions.getPrice('cosmetic'), function(targetVehicle)
+                common.createChoice(('neon_side:%s:on'):format(neon.id), locale('menus.general.enabled'), enabled, price, function(targetVehicle)
                     SetVehicleNeonLightEnabled(targetVehicle, neon.id, true)
                 end, locale('menus.performance.toggleState', neon.label, locale('menus.general.enabled')), 2),
-            },
-            disabled = false,
-        }
+            }
+        )
     end
 
     local r, g, b = GetVehicleNeonLightsColour(session.vehicle)
@@ -132,7 +127,7 @@ function builders.buildNeonOptions()
             ('neon_color:%s'):format(index),
             neonColor.label,
             neonColor.r == r and neonColor.g == g and neonColor.b == b,
-            actions.getPrice('cosmetic'),
+            price,
             function(targetVehicle)
                 SetVehicleNeonLightsColour(targetVehicle, neonColor.r, neonColor.g, neonColor.b)
             end,
@@ -141,18 +136,7 @@ function builders.buildNeonOptions()
         )
     end
 
-    options[#options + 1] = {
-        id = 'neon_color',
-        label = locale('menus.neon.color'),
-        icon = '✦',
-        asset = 'neon',
-        group = 'Neon',
-        price = actions.getPrice('cosmetic'),
-        priceMod = 'cosmetic',
-        choices = colorChoices,
-        disabled = false,
-    }
-
+    options[#options + 1] = common.createOption('neon_color', locale('menus.neon.color'), '✦', 'neon', 'Neon', price, 'cosmetic', colorChoices)
     common.sortOptions(options)
     return options
 end
@@ -160,11 +144,12 @@ end
 function builders.buildXenonOption()
     if GetNumVehicleMods(session.vehicle, 22) <= 0 then return nil end
 
+    local price = cosmeticPrice()
     local toggle = IsToggleModOn(session.vehicle, 22)
     local current = GetVehicleXenonLightsColor(session.vehicle)
     current = current == 255 and -1 or current
     local choices = {
-        common.createChoice('xenon:disabled', locale('menus.general.disabled'), not toggle, actions.getPrice('cosmetic'), function(targetVehicle)
+        common.createChoice('xenon:disabled', locale('menus.general.disabled'), not toggle, price, function(targetVehicle)
             ToggleVehicleMod(targetVehicle, 22, false)
         end, locale('menus.options.xenon.installed', locale('menus.general.disabled')), 1)
     }
@@ -175,7 +160,7 @@ function builders.buildXenonOption()
                 ('xenon:%s'):format(xenon.id),
                 xenon.label,
                 toggle and current == xenon.id,
-                actions.getPrice('cosmetic'),
+                price,
                 function(targetVehicle)
                     ToggleVehicleMod(targetVehicle, 22, true)
                     SetVehicleXenonLightsColor(targetVehicle, xenon.id)
@@ -186,40 +171,35 @@ function builders.buildXenonOption()
         end
     end
 
-    return {
-        id = 'xenon',
-        label = locale('menus.options.xenon.title'),
-        icon = '✦',
-        asset = 'xenon',
-        group = 'Iluminação',
-        price = actions.getPrice('cosmetic'),
-        priceMod = 'cosmetic',
-        choices = choices,
-        disabled = false,
-    }
+    return common.createOption('xenon', locale('menus.options.xenon.title'), '✦', 'xenon', 'Iluminação', price, 'cosmetic', choices)
 end
 
 function builders.buildLiveryOption()
     local oldLivery = GetVehicleLivery(session.vehicle)
     local newLivery = GetVehicleMod(session.vehicle, 48)
     local choices = {}
+    local price = cosmeticPrice()
 
     if newLivery >= 0 or oldLivery == -1 then
         local modCount = GetNumVehicleMods(session.vehicle, 48)
         if modCount <= 0 then return nil end
 
-        choices[#choices + 1] = common.createChoice('livery:stock', locale('menus.general.stock'), newLivery == -1, actions.getPrice('cosmetic'), function(targetVehicle)
+        choices[#choices + 1] = common.createChoice('livery:stock', locale('menus.general.stock'), newLivery == -1, price, function(targetVehicle)
             SetVehicleMod(targetVehicle, 48, -1, false)
         end, locale('menus.general.installed', locale('menus.general.stock')), 1)
 
         for index = 0, modCount - 1 do
             local rawLabel = GetModTextLabel(session.vehicle, 48, index)
             local label = rawLabel and rawLabel ~= '' and GetLabelText(rawLabel) or ('Livery %d'):format(index + 1)
+            if label == 'NULL' then
+                label = ('Livery %d'):format(index + 1)
+            end
+
             choices[#choices + 1] = common.createChoice(
                 ('livery:new:%s'):format(index),
                 label,
                 newLivery == index,
-                actions.getPrice('cosmetic'),
+                price,
                 function(targetVehicle)
                     SetVehicleMod(targetVehicle, 48, index, false)
                 end,
@@ -237,7 +217,7 @@ function builders.buildLiveryOption()
                 ('livery:old:%s'):format(index),
                 label,
                 oldLivery == index,
-                actions.getPrice('cosmetic'),
+                price,
                 function(targetVehicle)
                     SetVehicleLivery(targetVehicle, index)
                 end,
@@ -249,17 +229,7 @@ function builders.buildLiveryOption()
 
     if #choices == 0 then return nil end
 
-    return {
-        id = 'livery',
-        label = locale('menus.options.livery'),
-        icon = '▨',
-        asset = '48',
-        group = 'Visual',
-        price = actions.getPrice('cosmetic'),
-        priceMod = 'cosmetic',
-        choices = choices,
-        disabled = false,
-    }
+    return common.createOption('livery', locale('menus.options.livery'), '▨', '48', 'Visual', price, 'cosmetic', choices)
 end
 
 return builders

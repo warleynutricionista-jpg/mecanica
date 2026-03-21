@@ -10,6 +10,10 @@ end
 
 function common.cloneCategory(categoryId)
     local data = categoriesIndex[categoryId]
+    if not data then
+        return nil
+    end
+
     return {
         id = data.id,
         label = data.label,
@@ -22,7 +26,7 @@ function common.cloneCategory(categoryId)
 end
 
 function common.addOption(category, option)
-    if not option then return end
+    if not category or not option then return end
     category.enabled = true
     category.options[#category.options + 1] = option
 end
@@ -44,6 +48,21 @@ function common.createChoice(id, label, installed, price, apply, successLabel, l
         apply = apply,
         successLabel = successLabel,
         level = level,
+    }
+end
+
+function common.createOption(id, label, icon, asset, group, price, priceMod, choices, extra)
+    return {
+        id = id,
+        label = label,
+        icon = icon,
+        asset = asset,
+        group = group,
+        price = price,
+        priceMod = priceMod,
+        choices = choices,
+        disabled = false,
+        action = extra and extra.action or nil,
     }
 end
 

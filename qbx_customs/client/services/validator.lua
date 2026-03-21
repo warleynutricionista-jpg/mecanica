@@ -3,6 +3,10 @@ local vehicle = require 'client.services.vehicle'
 
 local validator = {}
 
+local function isDriver(targetVehicle)
+    return targetVehicle ~= 0 and GetPedInVehicleSeat(targetVehicle, -1) == cache.ped
+end
+
 function validator.canOpenCustoms(targetVehicle)
     if session.isOpen or session.isClosing then
         return false, 'busy'
@@ -14,6 +18,10 @@ function validator.canOpenCustoms(targetVehicle)
 
     if IsEntityDead(targetVehicle) then
         return false, 'destroyedVehicle'
+    end
+
+    if not isDriver(targetVehicle) then
+        return false, 'driverSeat'
     end
 
     return true
@@ -37,11 +45,15 @@ function validator.ensureActiveSession()
         return false, 'leftVehicle'
     end
 
-    if GetPedInVehicleSeat(targetVehicle, -1) ~= cache.ped then
+    if not isDriver(targetVehicle) then
         return false, 'driverSeat'
     end
 
     return true
+end
+
+function validator.isRenderableChoice(option, choice)
+    return option and choice and not choice.blocked and type(choice.apply) == 'function'
 end
 
 return validator

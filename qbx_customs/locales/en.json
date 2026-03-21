@@ -1,93 +1,92 @@
 {
-    "notifications": {
-        "success": {
-            "repaired": "Vehicle repaired!",
-            "paid": "You paid $%s from your bank account"
-        },
-        "error": {
-            "money": "You don't have enough money!",
-            "alreadyInstalled": "You already have this mod installed"
-        },
-        "props": {
-            "installTitle": "Customs"
-        }
+  "notifications": {
+    "success": {
+      "repaired": "Vehicle repaired!",
+      "paid": "You paid $%s from your bank account"
     },
-    "dragCam": {
-        "zoomIn": "Increase zoom",
-        "zoomOut": "Decrease zoom",
-        "toggleDoors": "Toggle doors",
-        "changeView": "Toggle first person view"
+    "error": {
+      "money": "You do not have enough money!",
+      "alreadyInstalled": "This modification is already installed.",
+      "driverSeat": "You must be in the driver seat to open customs."
     },
-    "textUI": {
-        "tune":  "Press [E] to tune your car"
+    "props": {
+      "installTitle": "Customs"
+    }
+  },
+  "dragCam": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "toggleDoors": "Toggle doors",
+    "changeView": "Toggle first person view"
+  },
+  "textUI": {
+    "tune": "Press [E] to open the menu"
+  },
+  "menus": {
+    "main": {
+      "title": "qbx Customs",
+      "repair": "Full repair"
     },
-    "menus": {
-        "main": {
-            "title": "Popcorn Customs",
-            "repair": "Repair",
-            "performance": "Performance",
-            "parts": "Cosmetics - Parts",
-            "colors": "Cosmetics - Colors",
-            "extras": "Extras"
-        },
-        "colors": {
-            "primary": "Paint primary",
-            "secondary": "Paint secondary",
-            "neon": "Neon",
-            "cosmetics_colors": "Cosmetics - Colors"
-        },
-        "neon": {
-            "title": "Neon",
-            "neon": "Neon %s%s",
-            "color": "Neon color",
-            "installed": "%s neon installed"
-        },
-        "paint": {
-            "title": "Cosmetics - Colors",
-            "primary": "Primary paint",
-            "secondary": "Secondary paint"
-        },
-        "parts": {
-            "title": "Cosmetics - Parts",
-            "wheels": "Wheels"
-        },
-        "performance": {
-            "title": "Performance",
-            "turbo": "Turbo"
-        },
-        "wheels": {
-            "title": "Wheels",
-            "bikeRear": "Bike rear wheel",
-            "installed": "%s %s installed"
-        },
-        "options": {
-            "interior": "Interior",
-            "livery": "Livery",
-            "pearlescent": "Pearlescent",
-            "plateIndex": {
-                "title": "Plate Index",
-                "installed": "%s plate installed"
-            },
-            "tyreSmoke": "Tyre smoke",
-            "wheelColor": "Wheel color",
-            "windowTint": {
-                "title": "Window Tint",
-                "installed": "%s windows installed"
-            },
-            "xenon": {
-                "title": "Xenon",
-                "installed": "%s xenon installed"
-            }
-        },
-        "general": {
-            "stock": "Stock",
-            "enabled": "Enabled",
-            "disabled": "Disabled",
-            "installed": "%s installed",
-            "applied": "%s applied"
-        }
+    "performance": {
+      "title": "Performance",
+      "turbo": "Turbo",
+      "toggleState": "%s %s"
+    },
+    "wheels": {
+      "title": "Wheels",
+      "bikeRear": "Bike rear wheel",
+      "installed": "%s %s installed"
+    },
+    "neon": {
+      "title": "Neon",
+      "neon": "Neon %s%s",
+      "color": "Neon color",
+      "installed": "%s neon installed"
+    },
+    "options": {
+      "livery": "Livery",
+      "plateIndex": {
+        "title": "Plate index",
+        "installed": "%s plate installed"
+      },
+      "windowTint": {
+        "title": "Window tint",
+        "installed": "%s applied"
+      },
+      "xenon": {
+        "title": "Xenon headlights",
+        "installed": "%s xenon installed"
+      }
     },
     "general": {
-        "payReason": "Customs"
+      "stock": "Stock",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "installed": "%s installed",
+      "applied": "%s applied"
     }
+  },
+  "ui": {
+    "catalog": "Catalog",
+    "sessionTotal": "Session total",
+    "selectedPrice": "Selected price",
+    "statusInstalled": "Installed",
+    "statusAvailable": "Available",
+    "statusBlocked": "Blocked",
+    "unavailable": "Unavailable",
+    "noOptions": "No compatible option was found for this category.",
+    "noChoices": "Select a part to see the available variations.",
+    "emptyCategory": "This category is empty or incompatible with this vehicle.",
+    "apply": "Apply",
+    "preview": "Hover or focus to preview.",
+    "close": "Close",
+    "hint": "Hover or use TAB to preview, click apply to confirm.",
+    "installedHint": "Already installed on the vehicle.",
+    "actionHint": "Direct action for this service.",
+    "repairNow": "Run repair",
+    "unknown": "Unknown"
+  },
+  "general": {
+    "payReason": "Customs"
+  }
 }

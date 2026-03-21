@@ -4,7 +4,7 @@ local config = require 'config.client'
 ---@param modType number
 ---@param modValue number
 ---@return string
-function GetModLabel (vehicle, modType, modValue)
+function GetModLabel(vehicle, modType, modValue)
     if config.modLabels[modType] then
         for _, mod in ipairs(config.modLabels[modType]) do
             if mod.id == modValue then return mod.label end
@@ -18,7 +18,7 @@ function GetModLabel (vehicle, modType, modValue)
 end
 
 ---@param duplicate boolean
----@param mod 'repair' | 'cosmetic' | 'colors' | 11 | 12 | 13 | 15 | 18
+---@param mod 'repair' | 'cosmetic' | 11 | 12 | 13 | 15 | 16 | 18
 ---@param props NotifyProps?
 ---@param level number?
 function InstallMod(duplicate, mod, props, level)

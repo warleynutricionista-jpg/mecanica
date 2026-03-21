@@ -1,93 +1,92 @@
 {
-    "notifications": {
-        "success": {
-            "repaired": "Veículo consertado!",
-            "paid": "Você pagou $%s da sua conta bancária"
-        },
-        "error": {
-            "money": "Você não tem dinheiro suficiente!",
-            "alreadyInstalled": "Você já instalou este mod"
-        },
-        "props": {
-            "installTitle": "Customizações"
-        }
+  "notifications": {
+    "success": {
+      "repaired": "Veículo consertado!",
+      "paid": "Você pagou $%s da sua conta bancária"
     },
-    "dragCam": {
-        "zoomIn": "Aumentar zoom",
-        "zoomOut": "Diminuir zoom",
-        "toggleDoors": "Alternar portas",
-        "changeView": "Alternar visão em primeira pessoa"
+    "error": {
+      "money": "Você não tem dinheiro suficiente!",
+      "alreadyInstalled": "Você já instalou esta modificação.",
+      "driverSeat": "Você precisa estar no banco do motorista para abrir a customização."
     },
-    "textUI": {
-        "tune":  "Pressione [E] para abrir o menu"
+    "props": {
+      "installTitle": "Customizações"
+    }
+  },
+  "dragCam": {
+    "zoomIn": "Aumentar zoom",
+    "zoomOut": "Diminuir zoom",
+    "toggleDoors": "Alternar portas",
+    "changeView": "Alternar visão em primeira pessoa"
+  },
+  "textUI": {
+    "tune": "Pressione [E] para abrir o menu"
+  },
+  "menus": {
+    "main": {
+      "title": "qbx Customs",
+      "repair": "Reparo completo"
     },
-    "menus": {
-        "main": {
-            "title": "Customização",
-            "repair": "Consertar",
-            "performance": "Performance",
-            "parts": "Estética - Peças",
-            "colors": "Estética - Cores",
-            "extras": "Extras"
-        },
-        "colors": {
-            "primary": "Pintura primária",
-            "secondary": "Pintura secundária",
-            "neon": "Neon",
-            "cosmetics_colors": "Estética - Cores"
-        },
-        "neon": {
-            "title": "Neon",
-            "neon": "Neon %s%s",
-            "color": "Cor do neon",
-            "installed": "Neon %s instalado"
-        },
-        "paint": {
-            "title": "Estética - Cores",
-            "primary": "Pintura primária",
-            "secondary": "Pintura secundária"
-        },
-        "parts": {
-            "title": "Estética - Peças",
-            "wheels": "Rodas"
-        },
-        "performance": {
-            "title": "Performance",
-            "turbo": "Turbo"
-        },
-        "wheels": {
-            "title": "Rodas",
-            "bikeRear": "Roda traseira da bike",
-            "installed": "%s %s instalado"
-        },
-        "options": {
-            "interior": "Interior",
-            "livery": "Estampa",
-            "pearlescent": "Nacre",
-            "plateIndex": {
-                "title": "Índice da placa",
-                "installed": "Placa %s instalada"
-            },
-            "tyreSmoke": "Fumaça dos pneus",
-            "wheelColor": "Cor da roda",
-            "windowTint": {
-                "title": "Película dos vidros",
-                "installed": "%s vidros instalados"
-            },
-            "xenon": {
-                "title": "Xenon",
-                "installed": "Xenon %s instalado"
-            }
-        },
-        "general": {
-            "stock": "Original",
-            "enabled": "Ativado",
-            "disabled": "Desativado",
-            "installed": "%s instalado",
-            "applied": "%s aplicado"
-        }
+    "performance": {
+      "title": "Performance",
+      "turbo": "Turbo",
+      "toggleState": "%s %s"
+    },
+    "wheels": {
+      "title": "Rodas",
+      "bikeRear": "Roda traseira da moto",
+      "installed": "%s %s instalado"
+    },
+    "neon": {
+      "title": "Neon",
+      "neon": "Neon %s%s",
+      "color": "Cor do neon",
+      "installed": "Neon %s instalado"
+    },
+    "options": {
+      "livery": "Livery",
+      "plateIndex": {
+        "title": "Índice da placa",
+        "installed": "Placa %s instalada"
+      },
+      "windowTint": {
+        "title": "Película dos vidros",
+        "installed": "%s aplicado"
+      },
+      "xenon": {
+        "title": "Faróis de xenon",
+        "installed": "Xenon %s instalado"
+      }
     },
     "general": {
-        "payReason": "Customizações"
+      "stock": "Original",
+      "enabled": "Ativado",
+      "disabled": "Desativado",
+      "installed": "%s instalado",
+      "applied": "%s aplicado"
     }
+  },
+  "ui": {
+    "catalog": "Catálogo",
+    "sessionTotal": "Total da sessão",
+    "selectedPrice": "Preço do item",
+    "statusInstalled": "Instalado",
+    "statusAvailable": "Disponível",
+    "statusBlocked": "Bloqueado",
+    "unavailable": "Indisponível",
+    "noOptions": "Nenhuma opção compatível foi encontrada para esta categoria.",
+    "noChoices": "Selecione uma peça para ver as variações disponíveis.",
+    "emptyCategory": "Categoria vazia ou incompatível com este veículo.",
+    "apply": "Aplicar",
+    "preview": "Preview automático ao focar.",
+    "close": "Fechar",
+    "hint": "Passe o mouse ou use TAB para visualizar, clique em aplicar para confirmar.",
+    "installedHint": "Já instalado no veículo.",
+    "actionHint": "Ação direta para este serviço.",
+    "repairNow": "Executar reparo",
+    "unknown": "Desconhecido"
+  },
+  "general": {
+    "payReason": "Customizações"
+  }
 }

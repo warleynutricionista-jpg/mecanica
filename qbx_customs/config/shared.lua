@@ -1,53 +1,114 @@
 return {
     debug = false,
-    -- If you experience issues with your zones not working, please ensure the Z value of your vec3 points match. Using different heights may cause problems.
-    ---@type ZoneOptions[]
+    allowTemporaryVehicles = false,
+    textUiPosition = 'right-center',
+    billing = {
+        accountOrder = { 'cash', 'bank' },
+        refundAccountFallback = 'bank',
+    },
+    prices = {
+        cosmetic = 500,
+        repair = {
+            multiplier = 1.0,
+            minimum = 100,
+            maximum = 5000,
+        },
+        [11] = { 0, 10000, 20000, 30000, 40000 },
+        [12] = { 0, 2500, 5000, 7500 },
+        [13] = { 0, 5000, 10000, 15000, 20000 },
+        [15] = { 0, 3000, 6000, 9000, 12000, 15000 },
+        [16] = { 0, 5000, 10000, 15000, 20000 },
+        [18] = { 0, 10000 },
+    },
     zones = {
         {
+            id = 'los_santos_customs_central',
+            label = 'Los Santos Customs',
             hideBlip = true,
             points = {
                 vec3(-349.0, -138.0, 39.0),
                 vec3(-345.0, -133.0, 39.0),
                 vec3(-330.0, -135.0, 39.0),
                 vec3(-336.0, -142.0, 39.0),
-            }
+            },
+            allowedClasses = nil,
+            deniedClasses = {
+                [13] = true,
+                [14] = true,
+                [15] = true,
+                [16] = true,
+                [21] = true,
+            },
+            restrictedJobs = nil,
+            requireDuty = true,
+            freeRepairJobs = { 'mechanic' },
+            freeModJobs = nil,
         },
         {
+            id = 'los_santos_customs_beach',
+            label = 'Los Santos Customs',
             hideBlip = true,
             points = {
                 vec3(-1405.72, -445.51, 34.48),
                 vec3(-1427.71, -460.16, 34.48),
                 vec3(-1434.71, -449.5, 34.48),
                 vec3(-1411.64, -435.57, 34.48),
-            }
+            },
+            deniedClasses = {
+                [13] = true,
+                [14] = true,
+                [15] = true,
+                [16] = true,
+                [21] = true,
+            },
+            restrictedJobs = nil,
+            requireDuty = true,
+            freeRepairJobs = { 'mechanic' },
+            freeModJobs = nil,
         },
         {
+            id = 'beeker_garage_harmony',
+            label = 'Beeker\'s Garage',
             hideBlip = true,
             points = {
                 vec3(1171.9, 2635.58, 37.77),
                 vec3(1171.87, 2644.71, 37.77),
                 vec3(1189.76, 2644.09, 37.77),
                 vec3(1189.77, 2636.05, 37.77),
-            }
+            },
+            deniedClasses = {
+                [13] = true,
+                [14] = true,
+                [15] = true,
+                [16] = true,
+                [21] = true,
+            },
+            restrictedJobs = nil,
+            requireDuty = true,
+            freeRepairJobs = { 'mechanic' },
+            freeModJobs = nil,
         },
         {
+            id = 'los_santos_customs_paleto',
+            label = 'Los Santos Customs',
             hideBlip = true,
             points = {
                 vec3(96.74, 6619.63, 31.79),
                 vec3(102.72, 6613.48, 31.79),
                 vec3(116.01, 6625.49, 31.79),
                 vec3(109.59, 6632.11, 31.79),
-            }
-        }
+            },
+            deniedClasses = {
+                [13] = true,
+                [14] = true,
+                [15] = true,
+                [16] = true,
+                [21] = true,
+            },
+            restrictedJobs = nil,
+            requireDuty = true,
+            freeRepairJobs = { 'mechanic' },
+            freeModJobs = nil,
+        },
     },
-
-    prices = {
-        cosmetic = 500,
-        [11] = {0, 10000, 20000, 30000, 40000},     -- Engine
-        [12] = {0, 2500, 5000, 7500},               -- Brakes
-        [13] = {0, 5000, 10000, 15000, 20000},      -- Transmission
-        [15] = {0, 3000, 6000, 9000, 12000, 15000}, -- Suspension
-        [16] = {0, 5000, 10000, 15000, 20000},      -- Armor
-        [18] = 10000                                -- Turbo
-    }
 }

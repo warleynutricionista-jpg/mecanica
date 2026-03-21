@@ -27,32 +27,53 @@ const applyBtn = document.getElementById('apply-btn');
 const restoreBtn = document.getElementById('restore-btn');
 const closeBtn = document.getElementById('close-btn');
 
-let state = null;
-let isOpen = false;
-let previewRequest = null;
 const iconBasePath = 'assets/renzu-icons';
+const initialState = {
+  isOpen: false,
+  currentView: null,
+  payload: null,
+  previewRequest: null,
+  openToken: 0,
+};
 
-const formatMoney = (value) => `${state?.currency ?? 'R$'}${Number(value || 0).toLocaleString('pt-BR')}`;
+const uiState = { ...initialState };
+let failsafeTimer = 0;
+
+const formatMoney = (value) => `${uiState.payload?.currency ?? 'R$'}${Number(value || 0).toLocaleString('pt-BR')}`;
 
 function post(event, data = {}) {
   fetch(`https://${resourceName}/${event}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify(data),
+  }).catch(() => {
+    closeUI();
   });
 }
 
-function setVisibility(visible) {
-  isOpen = visible;
-  body.classList.toggle('nui-open', visible);
-  app.classList.toggle('is-open', visible);
-  app.classList.toggle('hidden', !visible);
+function clearFailsafe() {
+  if (failsafeTimer) {
+    window.clearTimeout(failsafeTimer);
+    failsafeTimer = 0;
+  }
+}
+
+function setClosedAttributes() {
+  body.classList.remove('ui-active');
+  app.dataset.open = 'false';
+  app.setAttribute('aria-hidden', 'true');
+}
+
+function setOpenAttributes() {
+  body.classList.add('ui-active');
+  app.dataset.open = 'true';
+  app.setAttribute('aria-hidden', 'false');
 }
 
 function clearView() {
-  categoriesEl.innerHTML = '';
-  optionsEl.innerHTML = '';
-  choicesEl.innerHTML = '';
+  categoriesEl.replaceChildren();
+  optionsEl.replaceChildren();
+  choicesEl.replaceChildren();
   emptyOptionsEl.textContent = '';
   emptyChoicesEl.textContent = '';
   breadcrumbEl.textContent = '';
@@ -74,23 +95,63 @@ function clearView() {
   optionNameEl.textContent = '';
   optionGroupEl.textContent = '';
   applyBtn.disabled = true;
+  emptyOptionsEl.classList.add('hidden');
+  emptyChoicesEl.classList.add('hidden');
 }
 
-function closeView() {
-  previewRequest = null;
-  state = null;
-  setVisibility(false);
+function resetState() {
+  clearFailsafe();
+  uiState.isOpen = false;
+  uiState.currentView = null;
+  uiState.payload = null;
+  uiState.previewRequest = null;
+  uiState.openToken += 1;
+}
+
+function closeUI() {
+  resetState();
+  setClosedAttributes();
   clearView();
 }
 
-function schedulePreview(choiceId) {
-  if (!isOpen || !state?.currentOption || !choiceId) return;
-  if (previewRequest === choiceId) return;
+function hardResetUI(reason = 'hard-reset') {
+  closeUI();
+  if (reason === 'message-close' || reason === 'message-reset') {
+    return;
+  }
 
-  previewRequest = choiceId;
+  post('close');
+}
+
+function scheduleFailsafe(expectedToken) {
+  clearFailsafe();
+  failsafeTimer = window.setTimeout(() => {
+    if (!uiState.isOpen || expectedToken !== uiState.openToken) {
+      return;
+    }
+
+    const hasRenderableContent = Boolean(
+      uiState.payload
+      && uiState.payload.locale
+      && Array.isArray(uiState.payload.categories)
+      && categoriesEl.childElementCount === uiState.payload.categories.length
+    );
+
+    if (!hasRenderableContent) {
+      hardResetUI('render-timeout');
+    }
+  }, 1500);
+}
+
+function schedulePreview(choiceId) {
+  if (!uiState.isOpen || !uiState.payload?.currentOption || !choiceId) return;
+  if (uiState.previewRequest === choiceId) return;
+
+  uiState.previewRequest = choiceId;
+  const currentToken = uiState.openToken;
   window.requestAnimationFrame(() => {
-    if (!isOpen || previewRequest !== choiceId || !state?.currentOption) return;
-    post('previewChoice', { optionId: state.currentOption, choiceId });
+    if (!uiState.isOpen || currentToken !== uiState.openToken || uiState.previewRequest !== choiceId || !uiState.payload?.currentOption) return;
+    post('previewChoice', { optionId: uiState.payload.currentOption, choiceId });
   });
 }
 
@@ -137,15 +198,15 @@ function createInfoMain(title, description, className = 'item-main') {
 }
 
 function activeCategory() {
-  return state?.categories?.find((category) => category.id === state.currentCategory);
+  return uiState.payload?.categories?.find((category) => category.id === uiState.payload.currentCategory);
 }
 
 function activeOption() {
-  return state?.options?.find((option) => option.id === state.currentOption);
+  return uiState.payload?.options?.find((option) => option.id === uiState.payload.currentOption);
 }
 
 function activeChoice() {
-  return state?.choices?.find((choice) => choice.id === state.currentChoice);
+  return uiState.payload?.choices?.find((choice) => choice.id === uiState.payload.currentChoice);
 }
 
 function statusClass(choice) {
@@ -156,18 +217,18 @@ function statusClass(choice) {
 }
 
 function statusLabel(choice) {
-  if (!choice) return state.locale.available;
-  if (choice.blocked) return state.locale.blocked;
-  if (choice.installed) return state.locale.installed;
-  return state.locale.available;
+  if (!choice) return uiState.payload.locale.available;
+  if (choice.blocked) return uiState.payload.locale.blocked;
+  if (choice.installed) return uiState.payload.locale.installed;
+  return uiState.payload.locale.available;
 }
 
 function renderCategories() {
-  categoriesEl.innerHTML = '';
-  state.categories.forEach((category) => {
+  categoriesEl.replaceChildren();
+  uiState.payload.categories.forEach((category) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `category ${category.id === state.currentCategory ? 'active' : ''} ${!category.enabled ? 'disabled' : ''}`;
+    button.className = `category ${category.id === uiState.payload.currentCategory ? 'active' : ''} ${!category.enabled ? 'disabled' : ''}`;
     button.disabled = !category.enabled;
 
     const head = document.createElement('div');
@@ -187,24 +248,24 @@ function renderCategories() {
 }
 
 function renderOptions() {
-  optionsEl.innerHTML = '';
+  optionsEl.replaceChildren();
   const category = activeCategory();
-  optionsTitleEl.textContent = category?.label ?? state.locale.breadcrumbRoot;
-  optionsSubtitleEl.textContent = category?.description ?? state.locale.emptyCategory;
-  emptyOptionsEl.textContent = state.locale.noOptions;
-  emptyOptionsEl.classList.toggle('hidden', state.options.length > 0);
+  optionsTitleEl.textContent = category?.label ?? uiState.payload.locale.breadcrumbRoot;
+  optionsSubtitleEl.textContent = category?.description ?? uiState.payload.locale.emptyCategory;
+  emptyOptionsEl.textContent = uiState.payload.locale.noOptions;
+  emptyOptionsEl.classList.toggle('hidden', uiState.payload.options.length > 0);
 
-  state.options.forEach((option) => {
+  uiState.payload.options.forEach((option) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `option ${option.id === state.currentOption ? 'active' : ''} ${option.disabled ? 'disabled' : ''}`;
+    button.className = `option ${option.id === uiState.payload.currentOption ? 'active' : ''} ${option.disabled ? 'disabled' : ''}`;
     button.disabled = option.disabled;
 
     const head = document.createElement('div');
     head.className = 'item-head';
     head.appendChild(createIcon(option.asset, option.icon));
     head.appendChild(createInfoMain(option.label, `${option.group} · ${option.currentLabel}`));
-    head.appendChild(createInfoMain(formatMoney(option.price), `${option.choiceCount} ${state.locale.variations}`, 'choice-main'));
+    head.appendChild(createInfoMain(formatMoney(option.price), `${option.choiceCount} ${uiState.payload.locale.variations}`, 'choice-main'));
 
     button.appendChild(head);
     button.addEventListener('click', () => post('selectOption', { optionId: option.id }));
@@ -213,42 +274,42 @@ function renderOptions() {
 }
 
 function renderChoices() {
-  choicesEl.innerHTML = '';
+  choicesEl.replaceChildren();
   const option = activeOption();
   const choice = activeChoice();
   const category = activeCategory();
 
-  breadcrumbEl.textContent = `${state.locale.breadcrumbRoot} / ${category?.label ?? '-'} / ${option?.label ?? '-'}`;
-  titleEl.textContent = state.locale.title;
-  vehicleNameEl.textContent = state.vehicle.name;
-  vehicleClassEl.textContent = state.vehicle.class;
-  vehiclePlateEl.textContent = state.vehicle.plate;
-  selectedLabelEl.textContent = state.locale.selectedPrice;
-  sessionLabelEl.textContent = state.locale.sessionTotal;
-  hintLabelEl.textContent = state.locale.hint;
-  selectedPriceEl.textContent = formatMoney(state.selectedPrice);
-  sessionTotalEl.textContent = formatMoney(state.sessionTotal);
+  breadcrumbEl.textContent = `${uiState.payload.locale.breadcrumbRoot} / ${category?.label ?? '-'} / ${option?.label ?? '-'}`;
+  titleEl.textContent = uiState.payload.locale.title;
+  vehicleNameEl.textContent = uiState.payload.vehicle.name;
+  vehicleClassEl.textContent = uiState.payload.vehicle.class;
+  vehiclePlateEl.textContent = uiState.payload.vehicle.plate;
+  selectedLabelEl.textContent = uiState.payload.locale.selectedPrice;
+  sessionLabelEl.textContent = uiState.payload.locale.sessionTotal;
+  hintLabelEl.textContent = uiState.payload.locale.hint;
+  selectedPriceEl.textContent = formatMoney(uiState.payload.selectedPrice);
+  sessionTotalEl.textContent = formatMoney(uiState.payload.sessionTotal);
 
-  previewTitleEl.textContent = option?.label ?? state.locale.previewFallback;
-  previewSubtitleEl.textContent = option ? `${option.group} · ${formatMoney(option.price)}` : state.locale.emptyCategory;
-  optionNameEl.textContent = option?.label ?? state.locale.emptyCategory;
-  optionGroupEl.textContent = option ? `${option.group} · ${option.currentLabel}` : state.locale.noChoices;
+  previewTitleEl.textContent = option?.label ?? uiState.payload.locale.previewFallback;
+  previewSubtitleEl.textContent = option ? `${option.group} · ${formatMoney(option.price)}` : uiState.payload.locale.emptyCategory;
+  optionNameEl.textContent = option?.label ?? uiState.payload.locale.emptyCategory;
+  optionGroupEl.textContent = option ? `${option.group} · ${option.currentLabel}` : uiState.payload.locale.noChoices;
 
   statusChipEl.className = `status-chip ${statusClass(choice)}`;
   statusChipEl.textContent = statusLabel(choice);
 
-  emptyChoicesEl.textContent = state.locale.noChoices;
-  emptyChoicesEl.classList.toggle('hidden', state.choices.length > 0);
+  emptyChoicesEl.textContent = uiState.payload.locale.noChoices;
+  emptyChoicesEl.classList.toggle('hidden', uiState.payload.choices.length > 0);
 
-  state.choices.forEach((entry) => {
+  uiState.payload.choices.forEach((entry) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `choice ${entry.id === state.currentChoice ? 'active' : ''} ${entry.blocked ? 'disabled' : ''}`;
+    button.className = `choice ${entry.id === uiState.payload.currentChoice ? 'active' : ''} ${entry.blocked ? 'disabled' : ''}`;
     button.disabled = entry.blocked;
 
     const head = document.createElement('div');
     head.className = 'choice-head';
-    head.appendChild(createInfoMain(entry.label, entry.installed ? state.locale.installedHint : entry.isAction ? state.locale.actionHint : state.locale.preview, 'choice-main'));
+    head.appendChild(createInfoMain(entry.label, entry.installed ? uiState.payload.locale.installedHint : entry.isAction ? uiState.payload.locale.actionHint : uiState.payload.locale.preview, 'choice-main'));
     head.appendChild(createInfoMain(formatMoney(entry.price), statusLabel(entry), 'choice-main'));
 
     button.appendChild(head);
@@ -257,7 +318,7 @@ function renderChoices() {
     button.addEventListener('click', () => {
       schedulePreview(entry.id);
       if (entry.isAction) {
-        post('installChoice', { optionId: state.currentOption, choiceId: entry.id });
+        post('installChoice', { optionId: uiState.payload.currentOption, choiceId: entry.id });
       }
     });
     choicesEl.appendChild(button);
@@ -266,41 +327,60 @@ function renderChoices() {
   applyBtn.disabled = !option || !choice || !!choice.blocked || !!choice.installed;
 }
 
-function render(payload) {
-  if (!payload?.visible) {
-    closeView();
-    return;
-  }
-
-  state = payload;
-  previewRequest = null;
-  setVisibility(true);
+function renderUI(payload) {
+  uiState.payload = payload;
+  uiState.previewRequest = null;
   renderCategories();
   renderOptions();
   renderChoices();
 }
+
+function openUI(payload) {
+  if (!payload || payload.visible !== true) {
+    hardResetUI('invalid-open-payload');
+    return;
+  }
+
+  resetState();
+  uiState.payload = payload;
+  uiState.currentView = payload.currentView ?? 'main';
+  uiState.isOpen = true;
+  setOpenAttributes();
+  renderUI(payload);
+  scheduleFailsafe(uiState.openToken);
+}
+
+window.openUI = openUI;
+window.closeUI = closeUI;
+window.hardResetUI = hardResetUI;
 
 window.addEventListener('message', (event) => {
   const payload = event.data;
   if (!payload || !payload.action) return;
 
   if (payload.action === 'close') {
-    closeView();
+    closeUI();
+    return;
+  }
+
+  if (payload.action === 'hardReset') {
+    closeUI();
     return;
   }
 
   if (payload.action === 'open') {
-    render(payload);
+    openUI(payload);
     return;
   }
 
-  if (payload.action === 'sync' && isOpen) {
-    render(payload);
+  if (payload.action === 'sync' && uiState.isOpen) {
+    renderUI(payload);
+    scheduleFailsafe(uiState.openToken);
   }
 });
 
 window.addEventListener('keydown', (event) => {
-  if (!isOpen) return;
+  if (!uiState.isOpen) return;
 
   if (event.key === 'Escape') {
     post('close');
@@ -308,30 +388,33 @@ window.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && state?.visible) {
+  if (document.hidden && uiState.isOpen) {
     post('focusLost');
   }
 });
 
 window.addEventListener('blur', () => {
-  if (state?.visible) {
+  if (uiState.isOpen) {
     post('focusLost');
   }
 });
 
 applyBtn.addEventListener('click', () => {
-  if (!isOpen || !state?.currentOption || !state?.currentChoice) return;
-  post('installChoice', { optionId: state.currentOption, choiceId: state.currentChoice });
+  if (!uiState.isOpen || !uiState.payload?.currentOption || !uiState.payload?.currentChoice) return;
+  post('installChoice', { optionId: uiState.payload.currentOption, choiceId: uiState.payload.currentChoice });
 });
 
 restoreBtn.addEventListener('click', () => {
-  if (!isOpen) return;
+  if (!uiState.isOpen) return;
   post('restorePreview');
 });
 
 closeBtn.addEventListener('click', () => {
-  if (!isOpen) return;
+  if (!uiState.isOpen) return;
   post('close');
 });
 
-closeView();
+window.addEventListener('load', () => {
+  closeUI();
+  post('uiReady');
+});

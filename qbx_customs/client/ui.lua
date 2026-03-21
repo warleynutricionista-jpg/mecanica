@@ -6,19 +6,69 @@ local validator = require 'client.services.validator'
 local ui = {}
 local runtimeCatalog
 
-local function rebuildPayload(action)
+local uiState = {
+    isUiOpen = false,
+    isUiLoaded = false,
+    isUiBusy = false,
+    currentView = nil,
+    lastOpenAt = 0,
+}
+
+local function setFocus(hasFocus, keepInput)
+    SetNuiFocus(hasFocus, hasFocus)
+    SetNuiFocusKeepInput(hasFocus and keepInput or false)
+end
+
+local function resetUiState()
+    runtimeCatalog = nil
+    uiState.isUiOpen = false
+    uiState.isUiBusy = false
+    uiState.currentView = nil
+    uiState.lastOpenAt = 0
+end
+
+local function rebuildPayload(action, extra)
     local built = payloadBuilder.build(action)
     runtimeCatalog = built.catalog
-    return built.nui
+
+    local payload = built.nui
+    if extra then
+        for key, value in pairs(extra) do
+            payload[key] = value
+        end
+    end
+
+    payload.uiState = {
+        isOpen = uiState.isUiOpen,
+        isBusy = uiState.isUiBusy,
+        isLoaded = uiState.isUiLoaded,
+        currentView = uiState.currentView,
+    }
+
+    return payload
+end
+
+local function sendMessage(payload)
+    SendNUIMessage(payload)
 end
 
 local function refreshMenu()
     local ok, reason = validator.ensureActiveSession()
-    if not ok and reason ~= 'closed' then
-        return false
+    if not ok then
+        return false, reason
     end
 
-    SendNUIMessage(rebuildPayload('sync'))
+    if not uiState.isUiOpen then
+        return false, 'uiClosed'
+    end
+
+    sendMessage(rebuildPayload('sync', {
+        visible = true,
+        currentView = uiState.currentView,
+        overlay = false,
+        focus = true,
+    }))
+
     return true
 end
 
@@ -37,21 +87,98 @@ local function getChoice(option, choiceId)
     return nil
 end
 
-function ui.open()
-    SendNUIMessage(rebuildPayload('open'))
-    SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(false)
+function ui.markLoaded()
+    uiState.isUiLoaded = true
+    resetUiState()
+    setFocus(false, false)
+    sendMessage({
+        action = 'hardReset',
+        visible = false,
+        overlay = false,
+        currentView = nil,
+    })
+end
+
+function ui.isOpen()
+    return uiState.isUiOpen
+end
+
+function ui.isBusy()
+    return uiState.isUiBusy
+end
+
+function ui.open(view)
+    if not uiState.isUiLoaded then
+        return false, 'busy'
+    end
+
+    if uiState.isUiBusy then
+        return false, 'busy'
+    end
+
+    if uiState.isUiOpen then
+        return false, 'alreadyOpen'
+    end
+
+    local ok, reason = validator.ensureActiveSession()
+    if not ok then
+        return false, reason
+    end
+
+    uiState.isUiBusy = true
+    uiState.currentView = view or 'main'
+    uiState.isUiOpen = true
+
+    local payload = rebuildPayload('open', {
+        visible = true,
+        currentView = uiState.currentView,
+        overlay = false,
+        focus = true,
+    })
+
+    sendMessage(payload)
+    setFocus(true, false)
+
+    uiState.lastOpenAt = GetGameTimer()
+    uiState.isUiBusy = false
+
+    return true
 end
 
 function ui.refresh()
-    refreshMenu()
+    return refreshMenu()
 end
 
-function ui.hide()
-    runtimeCatalog = nil
-    SendNUIMessage({ action = 'close' })
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+function ui.close(reason)
+    setFocus(false, false)
+    resetUiState()
+    sendMessage({
+        action = 'hardReset',
+        visible = false,
+        overlay = false,
+        currentView = nil,
+        reason = reason,
+    })
+end
+
+function ui.forceReset(reason)
+    actions.restoreCommitted()
+    ui.close(reason or 'forcedReset')
+end
+
+function ui.ensureClosed(reason)
+    if session.isOpen or uiState.isUiOpen or uiState.isUiBusy then
+        ui.forceReset(reason or 'desync')
+    else
+        setFocus(false, false)
+        sendMessage({
+            action = 'hardReset',
+            visible = false,
+            overlay = false,
+            currentView = nil,
+            reason = reason or 'idleReset',
+        })
+    end
 end
 
 function ui.getOption(optionId)

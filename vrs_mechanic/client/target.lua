@@ -49,6 +49,23 @@ local function getLiftVehicle(shopId, liftIndex)
     return VRS.GetEntityFromNetId and VRS.GetEntityFromNetId(netId, true) or nil
 end
 
+function getLiftReferenceForVehicle(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return nil
+    end
+
+    local state = VRS.GetLiftStateForVehicle and select(1, VRS.GetLiftStateForVehicle(vehicle)) or nil
+    if not state or not state.shopId or not state.liftIndex then
+        return nil
+    end
+
+    return {
+        shopId = state.shopId,
+        liftIndex = state.liftIndex,
+        state = state,
+    }
+end
+
 local function getVehicleHoodCommandCoords(vehicle)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return nil

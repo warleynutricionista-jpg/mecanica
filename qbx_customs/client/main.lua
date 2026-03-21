@@ -85,6 +85,11 @@ local function startSessionGuard()
                 break
             end
 
+            if not ui.isOpen() and not ui.isBusy() then
+                closeMenu(true, 'uiDesync')
+                break
+            end
+
             if IsPauseMenuActive() then
                 closeMenu(true, 'pauseMenu')
                 break

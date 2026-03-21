@@ -28,6 +28,13 @@ const restoreBtn = document.getElementById('restore-btn');
 const closeBtn = document.getElementById('close-btn');
 
 const iconBasePath = 'assets/renzu-icons';
+const initialState = {
+  isOpen: false,
+  currentView: null,
+  payload: null,
+  previewRequest: null,
+  openToken: 0,
+};
 
 const uiState = {
   show: false,
@@ -287,6 +294,25 @@ function openCustoms(payload) {
   renderOptions();
   renderChoices();
 }
+
+function openUI(payload) {
+  if (!payload || payload.visible !== true) {
+    hardResetUI('invalid-open-payload');
+    return;
+  }
+
+  resetState();
+  uiState.payload = payload;
+  uiState.currentView = payload.currentView ?? 'main';
+  uiState.isOpen = true;
+  setOpenAttributes();
+  renderUI(payload);
+  scheduleFailsafe(uiState.openToken);
+}
+
+window.openUI = openUI;
+window.closeUI = closeUI;
+window.hardResetUI = hardResetUI;
 
 window.addEventListener('message', (event) => {
   const payload = event.data;

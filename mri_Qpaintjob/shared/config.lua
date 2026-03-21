@@ -56,10 +56,18 @@ Config.FinishTypes = {
 
 Config.Particles = {
     Spray = {
-        dict = 'core',
-        name = 'ent_amb_steam',
-        scale = 1.0,
-        alpha = 0.85,
+        candidates = {
+            { dict = 'scr_playerlamgraff', name = 'scr_lamgraff_paint_spray', scale = 1.35, alpha = 0.95 },
+            { dict = 'scr_carwash', name = 'ent_amb_car_wash_jet_soap', scale = 0.5, alpha = 0.55 },
+            { dict = 'core', name = 'ent_sht_petrol', scale = 0.85, alpha = 0.7 },
+            { dict = 'core', name = 'ent_amb_steam', scale = 1.0, alpha = 0.85 },
+        },
+    },
+    Impact = {
+        candidates = {
+            { dict = 'core', name = 'veh_respray_smoke', scale = 0.45, alpha = 0.45 },
+            { dict = 'scr_paintnspray', name = 'scr_respray_smoke', scale = 0.35, alpha = 0.35 },
+        },
     },
     FinishSmoke = {
         dict = 'scr_paintnspray',

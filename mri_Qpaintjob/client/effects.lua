@@ -35,6 +35,72 @@ local function stopHandle(handle)
     end
 end
 
+local function normalizeParticleCandidates(definition)
+    if not definition then return {} end
+    if definition.candidates and #definition.candidates > 0 then
+        return definition.candidates
+    end
+    if definition.dict and definition.name then
+        return { definition }
+    end
+    return {}
+end
+
+local function resolveParticleFx(definition)
+    for _, candidate in ipairs(normalizeParticleCandidates(definition)) do
+        if loadPtfx(candidate.dict) then
+            return candidate
+        end
+    end
+    return nil
+end
+
+local function clamp(value, minValue, maxValue)
+    return math.max(minValue, math.min(maxValue, value))
+end
+
+local function getSpraySourceCoords(spray, object)
+    if object and DoesEntityExist(object) then
+        return GetOffsetFromEntityInWorldCoords(object, 0.18, 0.0, 0.08)
+    end
+
+    return Utils.toVec3(spray and spray.pos)
+end
+
+local function getVehicleTargetCoords(vehicle, sourceCoords, fallback)
+    local origin = Utils.toVec3(sourceCoords)
+    if not origin or not Utils.isValidVehicle(vehicle) then
+        return Utils.toVec3(fallback)
+    end
+
+    local minDim, maxDim = GetModelDimensions(GetEntityModel(vehicle))
+    local relative = GetOffsetFromEntityGivenWorldCoords(vehicle, origin.x, origin.y, origin.z)
+
+    local targetX = clamp(relative.x, minDim.x + 0.15, maxDim.x - 0.15)
+    local targetY = relative.y >= 0.0 and (maxDim.y - 0.02) or (minDim.y + 0.02)
+    local targetZ = clamp(relative.z, minDim.z + 0.35, maxDim.z - 0.12)
+
+    return GetOffsetFromEntityInWorldCoords(vehicle, targetX, targetY, targetZ)
+end
+
+local function calculateSprayRotation(fromCoords, targetCoords, fallback)
+    local origin = Utils.toVec3(fromCoords)
+    local target = Utils.toVec3(targetCoords)
+    if not origin or not target then
+        return Utils.toVec3(fallback) or vec3(0.0, 0.0, 0.0)
+    end
+
+    local delta = target - origin
+    local distance2d = math.sqrt((delta.x * delta.x) + (delta.y * delta.y))
+    if distance2d <= 0.001 and math.abs(delta.z) <= 0.001 then
+        return Utils.toVec3(fallback) or vec3(0.0, 0.0, 0.0)
+    end
+
+    local pitch = math.deg(math.atan2(-delta.z, math.max(distance2d, 0.001)))
+    local yaw = math.deg(math.atan2(delta.y, delta.x))
+    return vec3(0.0, pitch, yaw)
+end
+
 function Effects.spawnSprayProps()
     local modelHash = loadModel(Config.SprayModel)
     if not modelHash then
@@ -82,30 +148,52 @@ function Effects.startBooth(boothId, vehicle, color)
     local booth = Utils.getBooth(boothId)
     if not booth then return end
 
-    local sprayFx = Config.Particles.Spray
-    if not loadPtfx(sprayFx.dict) then return end
+    local sprayFx = resolveParticleFx(Config.Particles.Spray)
+    local impactFx = resolveParticleFx(Config.Particles.Impact)
+    if not sprayFx and not impactFx then return end
 
     Effects.active[boothId] = { handles = {} }
 
     for sprayIndex, spray in ipairs(booth.sprays or {}) do
         local object = Effects.sprayProps[boothId] and Effects.sprayProps[boothId][sprayIndex]
         if object and DoesEntityExist(object) then
-            local rot = Utils.toVec3(spray.rotation) or vec3(0.0, 0.0, 0.0)
-            UseParticleFxAsset(sprayFx.dict)
-            local handle = StartParticleFxLoopedOnEntity(
-                sprayFx.name,
-                object,
-                0.18, 0.0, 0.08,
-                rot.x, rot.y, rot.z,
-                spray.scale or sprayFx.scale or 1.0,
-                false, false, false
-            )
+            local sourceCoords = getSpraySourceCoords(spray, object)
+            local targetCoords = getVehicleTargetCoords(vehicle, sourceCoords, booth.vehicle)
+            local rot = calculateSprayRotation(sourceCoords, targetCoords, spray.rotation)
+            local rgb = color or { r = 255, g = 255, b = 255 }
 
-            if handle and handle ~= -1 then
-                local rgb = color or { r = 255, g = 255, b = 255 }
-                SetParticleFxLoopedColour(handle, rgb.r / 255.0, rgb.g / 255.0, rgb.b / 255.0, false)
-                SetParticleFxLoopedAlpha(handle, sprayFx.alpha or 0.85)
-                Effects.active[boothId].handles[#Effects.active[boothId].handles + 1] = handle
+            if sprayFx then
+                UseParticleFxAsset(sprayFx.dict)
+                local sprayHandle = StartParticleFxLoopedAtCoord(
+                    sprayFx.name,
+                    sourceCoords.x, sourceCoords.y, sourceCoords.z,
+                    rot.x, rot.y, rot.z,
+                    spray.scale or sprayFx.scale or 1.0,
+                    false, false, false, false
+                )
+
+                if sprayHandle and sprayHandle ~= -1 then
+                    SetParticleFxLoopedColour(sprayHandle, rgb.r / 255.0, rgb.g / 255.0, rgb.b / 255.0, false)
+                    SetParticleFxLoopedAlpha(sprayHandle, sprayFx.alpha or 0.85)
+                    Effects.active[boothId].handles[#Effects.active[boothId].handles + 1] = sprayHandle
+                end
+            end
+
+            if impactFx then
+                UseParticleFxAsset(impactFx.dict)
+                local impactHandle = StartParticleFxLoopedAtCoord(
+                    impactFx.name,
+                    targetCoords.x, targetCoords.y, targetCoords.z,
+                    rot.x, rot.y, rot.z,
+                    spray.impactScale or impactFx.scale or 0.45,
+                    false, false, false, false
+                )
+
+                if impactHandle and impactHandle ~= -1 then
+                    SetParticleFxLoopedColour(impactHandle, rgb.r / 255.0, rgb.g / 255.0, rgb.b / 255.0, false)
+                    SetParticleFxLoopedAlpha(impactHandle, impactFx.alpha or 0.45)
+                    Effects.active[boothId].handles[#Effects.active[boothId].handles + 1] = impactHandle
+                end
             end
         end
     end

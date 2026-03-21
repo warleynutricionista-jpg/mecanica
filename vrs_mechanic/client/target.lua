@@ -292,6 +292,26 @@ local function createVehicleTargets()
 
     exports.ox_target:addGlobalVehicle({
         {
+            name = 'vrs_lift_vehicle_command',
+            icon = 'fas fa-screwdriver-wrench',
+            label = 'Ponto de comando',
+            distance = 3.0,
+            bones = { 'bonnet' },
+            canInteract = function(entity)
+                local liftRef = getLiftReferenceForVehicle(entity)
+                return liftRef ~= nil and canUseLiftPanel(liftRef.shopId)
+            end,
+            onSelect = function(data)
+                local vehicle = data.entity
+                if not vehicle or not DoesEntityExist(vehicle) then return end
+
+                local liftRef = getLiftReferenceForVehicle(vehicle)
+                if not liftRef then return end
+
+                VRS.OpenLiftMenu(liftRef.shopId, liftRef.liftIndex)
+            end,
+        },
+        {
             name = 'vrs_vehicle_diagnose',
             icon = 'fas fa-stethoscope',
             label = 'Verificar veículo',
@@ -333,6 +353,7 @@ local function removeVehicleTargets()
 
     pcall(function()
         exports.ox_target:removeGlobalVehicle({
+            'vrs_lift_vehicle_command',
             'vrs_vehicle_diagnose',
             'vrs_street_repair',
         })

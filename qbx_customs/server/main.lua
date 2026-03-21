@@ -3,17 +3,20 @@ local sharedConfig = require 'config.shared'
 
 ---@return number
 local function getModPrice(mod, level)
-    if mod == 'cosmetic' or mod == 'colors' or mod == 18 then
-        return sharedConfig.prices[mod] --[[@as number]]
-    else
-        return sharedConfig.prices[mod][level]
+    local price = sharedConfig.prices[mod]
+    if type(price) == 'table' then
+        return price[level] or price[#price] or 0
     end
+
+    return price or 0
 end
 
 ---@param source number
 ---@param amount number
 ---@return boolean
 local function removeMoney(source, amount)
+    if amount <= 0 then return true end
+
     local player = exports.qbx_core:GetPlayer(source)
     local cashBalance = player.Functions.GetMoney('cash')
     local bankBalance = player.Functions.GetMoney('bank')
@@ -30,7 +33,6 @@ local function removeMoney(source, amount)
     return false
 end
 
--- Won't charge money for mods if the player's job is in the list
 lib.callback.register('qbx_customs:server:pay', function(source, mod, level)
     local zone = lib.callback.await('qbx_customs:client:zone', source)
 
@@ -48,7 +50,6 @@ lib.callback.register('qbx_customs:server:pay', function(source, mod, level)
     return removeMoney(source, getModPrice(mod, level))
 end)
 
--- Won't charge money for repairs if the player's job is in the list
 lib.callback.register('qbx_customs:server:repair', function(source, bodyHealth)
     local zone = lib.callback.await('qbx_customs:client:zone', source)
 
@@ -67,20 +68,14 @@ lib.callback.register('qbx_customs:server:repair', function(source, bodyHealth)
     return removeMoney(source, price)
 end)
 
-local function IsVehicleOwned(plate)
-    local result = MySQL.scalar.await('SELECT 1 from player_vehicles WHERE plate = ?', {plate})
-    if result then
-        return true
-    else
-        return false
-    end
+local function isVehicleOwned(plate)
+    return MySQL.scalar.await('SELECT 1 from player_vehicles WHERE plate = ?', {plate}) and true or false
 end
 
---Copied from qb-mechanicjob
 RegisterNetEvent('qbx_customs:server:saveVehicleProps', function()
     local src = source --[[@as number]]
     local vehicleProps = lib.callback.await('qbx_customs:client:vehicleProps', src)
-    if IsVehicleOwned(vehicleProps.plate) then
+    if vehicleProps and isVehicleOwned(vehicleProps.plate) then
         MySQL.update.await('UPDATE player_vehicles SET mods = ? WHERE plate = ?', {json.encode(vehicleProps), vehicleProps.plate})
     end
 end)

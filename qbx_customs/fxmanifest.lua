@@ -4,17 +4,23 @@ game 'gta5'
 author 'Jorn#0008'
 description 'qbx_customs'
 repository 'https://github.com/Qbox-project/qbx_customs'
-version '1.0.0'
+version '1.1.0'
 
 ox_lib 'locale'
 
 shared_script '@ox_lib/init.lua'
 
+ui_page 'web/index.html'
+
 client_scripts {
     '@qbx_core/modules/playerdata.lua',
     '@qbx_core/modules/lib.lua',
     'client/utils.lua',
-    'client/menus/main.lua',
+    'client/session.lua',
+    'client/actions.lua',
+    'client/catalog.lua',
+    'client/ui.lua',
+    'client/main.lua',
     'client/zones.lua',
 }
 
@@ -27,6 +33,9 @@ files {
     'locales/*.json',
     'config/*.lua',
     'client/**/*.lua',
+    'web/index.html',
+    'web/app.js',
+    'web/style.css',
     'carcols_gen9.meta',
     'carmodcols_gen9.meta',
 }

@@ -7,39 +7,41 @@ use_experimental_fxv2_oal 'yes'
 author 'OpenAI'
 description 'qbx_customs rebuilt for Qbox compatibility'
 repository 'https://github.com/Qbox-project/qbx_customs'
-version '2.0.0'
+version '2.0.1'
 
 ox_lib 'locale'
-shared_script '@ox_lib/init.lua'
 
 shared_scripts {
+    '@ox_lib/init.lua',
     '@qbx_core/modules/playerdata.lua',
     '@qbx_core/modules/lib.lua',
     'config/shared.lua',
     'config/client.lua',
-    'shared/*.lua',
+    'shared/pricing.lua',
 }
 
 client_scripts {
-    'client/services/*.lua',
-    'client/*.lua',
+    'client/session.lua',
+    'client/services/feedback.lua',
+    'client/services/access.lua',
+    'client/services/vehicle.lua',
+    'client/camera.lua',
+    'client/catalog.lua',
+    'client/menu.lua',
+    'client/main.lua',
+    'client/zones.lua',
 }
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
-    'server/services/*.lua',
+    'server/services/access.lua',
+    'server/services/billing.lua',
+    'server/services/persistence.lua',
     'server/main.lua',
 }
 
 files {
     'locales/*.json',
-    'config/*.lua',
-    'shared/*.lua',
-    'client/*.lua',
-    'client/services/*.lua',
-    'server/*.lua',
-    'server/services/*.lua',
-    'types.lua',
     'carcols_gen9.meta',
     'carmodcols_gen9.meta',
 }

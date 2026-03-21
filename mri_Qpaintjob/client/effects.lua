@@ -35,6 +35,24 @@ local function stopHandle(handle)
     end
 end
 
+local function calculateSprayRotation(fromCoords, targetCoords, fallback)
+    local origin = Utils.toVec3(fromCoords)
+    local target = Utils.toVec3(targetCoords)
+    if not origin or not target then
+        return Utils.toVec3(fallback) or vec3(0.0, 0.0, 0.0)
+    end
+
+    local delta = target - origin
+    local distance2d = math.sqrt((delta.x * delta.x) + (delta.y * delta.y))
+    if distance2d <= 0.001 and math.abs(delta.z) <= 0.001 then
+        return Utils.toVec3(fallback) or vec3(0.0, 0.0, 0.0)
+    end
+
+    local pitch = math.deg(math.atan2(-delta.z, math.max(distance2d, 0.001)))
+    local yaw = math.deg(math.atan2(delta.y, delta.x))
+    return vec3(0.0, pitch, yaw)
+end
+
 function Effects.spawnSprayProps()
     local modelHash = loadModel(Config.SprayModel)
     if not modelHash then
@@ -90,7 +108,8 @@ function Effects.startBooth(boothId, vehicle, color)
     for sprayIndex, spray in ipairs(booth.sprays or {}) do
         local object = Effects.sprayProps[boothId] and Effects.sprayProps[boothId][sprayIndex]
         if object and DoesEntityExist(object) then
-            local rot = Utils.toVec3(spray.rotation) or vec3(0.0, 0.0, 0.0)
+            local targetCoords = Utils.isValidVehicle(vehicle) and GetEntityCoords(vehicle) or booth.vehicle
+            local rot = calculateSprayRotation(spray.pos, targetCoords, spray.rotation)
             UseParticleFxAsset(sprayFx.dict)
             local handle = StartParticleFxLoopedOnEntity(
                 sprayFx.name,

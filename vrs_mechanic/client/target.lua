@@ -54,16 +54,13 @@ local function getVehicleHoodCommandCoords(vehicle)
         return nil
     end
 
-    local boneIndex = GetEntityBoneIndexByName(vehicle, 'bonnet')
-    if boneIndex and boneIndex ~= -1 then
-        local coords = GetWorldPositionOfEntityBone(vehicle, boneIndex)
-        if coords then
-            return vec3(coords.x, coords.y, coords.z + 0.2)
-        end
-    end
+    local minDim, maxDim = GetModelDimensions(GetEntityModel(vehicle))
+    local vehicleHeight = math.max((maxDim.z - minDim.z), 0.8)
+    local forwardOffset = math.max(maxDim.y - 0.35, 1.1)
+    local verticalOffset = minDim.z + (vehicleHeight * 0.55)
 
-    local fallback = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, 2.1, 0.5)
-    return vec3(fallback.x, fallback.y, fallback.z)
+    local coords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, forwardOffset, verticalOffset)
+    return vec3(coords.x, coords.y, coords.z)
 end
 
 local function removeLiftCommandTarget(liftKey)
@@ -155,7 +152,7 @@ local function refreshLiftCommandTargets()
                 activeTargets[liftKey] = true
                 local current = liftCommandTargets[liftKey]
                 local needsRebuild = not current
-                    or #(current.coords - coords) > 0.05
+                    or #(current.coords - coords) > 0.15
 
                 if needsRebuild then
                     if current then
@@ -166,13 +163,13 @@ local function refreshLiftCommandTargets()
                     local commandLiftIndex = state.liftIndex
                     local zoneId = exports.ox_target:addSphereZone({
                         coords = coords,
-                        radius = 0.35,
+                        radius = 0.55,
                         options = {
                             {
                                 name = ('vrs_lift_command_%s'):format(liftKey),
                                 icon = 'fas fa-tools',
                                 label = 'Serviços do elevador',
-                                distance = 1.5,
+                                distance = 2.0,
                                 canInteract = function()
                                     return canUseLiftPanel(commandShopId)
                                 end,
@@ -375,7 +372,7 @@ CreateThread(function()
 
     while true do
         refreshLiftCommandTargets()
-        Wait(300)
+        Wait(500)
     end
 end)
 

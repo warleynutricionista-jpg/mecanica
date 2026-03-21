@@ -10,6 +10,7 @@ local function summarizeChoice(choice)
     return {
         id = choice.id,
         label = choice.label,
+        asset = choice.asset,
         installed = choice.installed,
         blocked = choice.blocked,
         price = choice.price,
@@ -57,6 +58,7 @@ local function buildPayload()
             id = category.id,
             label = category.label,
             icon = category.icon,
+            asset = category.asset,
             description = category.description,
             enabled = count > 0,
             count = count,
@@ -80,6 +82,7 @@ local function buildPayload()
                 id = option.id,
                 label = option.label,
                 icon = option.icon,
+                asset = option.asset,
                 group = option.group,
                 price = option.price,
                 disabled = option.disabled,

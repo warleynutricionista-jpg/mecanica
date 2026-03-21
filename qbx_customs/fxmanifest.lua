@@ -36,6 +36,7 @@ files {
     'web/index.html',
     'web/app.js',
     'web/style.css',
+    'web/assets/**/*',
     'carcols_gen9.meta',
     'carmodcols_gen9.meta',
 }

@@ -27,6 +27,7 @@ const restoreBtn = document.getElementById('restore-btn');
 const closeBtn = document.getElementById('close-btn');
 
 let state = null;
+const iconBasePath = 'assets/renzu-icons';
 
 const formatMoney = (value) => `${state?.currency ?? 'R$'}${Number(value || 0).toLocaleString('pt-BR')}`;
 
@@ -36,6 +37,48 @@ function post(event, data = {}) {
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify(data),
   });
+}
+
+function createIcon(asset, fallback) {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'item-icon';
+
+  const fallbackNode = document.createElement('span');
+  fallbackNode.className = 'icon-fallback';
+  fallbackNode.textContent = fallback ?? '•';
+  wrapper.appendChild(fallbackNode);
+
+  if (!asset) return wrapper;
+
+  const image = new Image();
+  image.alt = '';
+  image.className = 'icon-image hidden';
+  image.src = `${iconBasePath}/${asset}.svg`;
+  image.addEventListener('load', () => {
+    fallbackNode.classList.add('hidden');
+    image.classList.remove('hidden');
+  });
+  image.addEventListener('error', () => {
+    image.remove();
+  });
+
+  wrapper.appendChild(image);
+  return wrapper;
+}
+
+function createInfoMain(title, description, className = 'item-main') {
+  const container = document.createElement('div');
+  container.className = className;
+
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  container.appendChild(strong);
+
+  const text = document.createElement('p');
+  text.textContent = description;
+  container.appendChild(text);
+
+  return container;
 }
 
 function setVisibility(visible) {
@@ -75,15 +118,18 @@ function renderCategories() {
     button.type = 'button';
     button.className = `category ${category.id === state.currentCategory ? 'active' : ''} ${!category.enabled ? 'disabled' : ''}`;
     button.disabled = !category.enabled;
-    button.innerHTML = `
-      <div class="item-head">
-        <span class="item-icon">${category.icon}</span>
-        <div class="item-main">
-          <strong>${category.label}</strong>
-          <p>${category.description}</p>
-        </div>
-        <span class="badge">${category.count}</span>
-      </div>`;
+
+    const head = document.createElement('div');
+    head.className = 'item-head';
+    head.appendChild(createIcon(category.asset, category.icon));
+    head.appendChild(createInfoMain(category.label, category.description));
+
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = category.count;
+    head.appendChild(badge);
+
+    button.appendChild(head);
     button.addEventListener('click', () => post('selectCategory', { categoryId: category.id }));
     categoriesEl.appendChild(button);
   });
@@ -102,18 +148,14 @@ function renderOptions() {
     button.type = 'button';
     button.className = `option ${option.id === state.currentOption ? 'active' : ''} ${option.disabled ? 'disabled' : ''}`;
     button.disabled = option.disabled;
-    button.innerHTML = `
-      <div class="item-head">
-        <span class="item-icon">${option.icon}</span>
-        <div class="item-main">
-          <strong>${option.label}</strong>
-          <p>${option.group} · ${option.currentLabel}</p>
-        </div>
-        <div class="choice-main">
-          <strong>${formatMoney(option.price)}</strong>
-          <p>${option.choiceCount} variações</p>
-        </div>
-      </div>`;
+
+    const head = document.createElement('div');
+    head.className = 'item-head';
+    head.appendChild(createIcon(option.asset, option.icon));
+    head.appendChild(createInfoMain(option.label, `${option.group} · ${option.currentLabel}`));
+    head.appendChild(createInfoMain(formatMoney(option.price), `${option.choiceCount} variações`, 'choice-main'));
+
+    button.appendChild(head);
     button.addEventListener('click', () => post('selectOption', { optionId: option.id }));
     optionsEl.appendChild(button);
   });
@@ -152,17 +194,13 @@ function renderChoices() {
     button.type = 'button';
     button.className = `choice ${entry.id === state.currentChoice ? 'active' : ''} ${entry.blocked ? 'disabled' : ''}`;
     button.disabled = entry.blocked;
-    button.innerHTML = `
-      <div class="choice-head">
-        <div class="choice-main">
-          <strong>${entry.label}</strong>
-          <p>${entry.installed ? state.locale.installedHint : entry.isAction ? state.locale.actionHint : state.locale.preview}</p>
-        </div>
-        <div class="choice-main">
-          <strong>${formatMoney(entry.price)}</strong>
-          <p>${statusLabel(entry)}</p>
-        </div>
-      </div>`;
+
+    const head = document.createElement('div');
+    head.className = 'choice-head';
+    head.appendChild(createInfoMain(entry.label, entry.installed ? state.locale.installedHint : entry.isAction ? state.locale.actionHint : state.locale.preview, 'choice-main'));
+    head.appendChild(createInfoMain(formatMoney(entry.price), statusLabel(entry), 'choice-main'));
+
+    button.appendChild(head);
     button.addEventListener('mouseenter', () => post('previewChoice', { optionId: state.currentOption, choiceId: entry.id }));
     button.addEventListener('focus', () => post('previewChoice', { optionId: state.currentOption, choiceId: entry.id }));
     button.addEventListener('click', () => {

@@ -5,49 +5,74 @@ local common = require 'client.catalog_builder.common'
 
 local builders = {}
 
+local function getPriceKey(definition)
+    return definition.category == 'performance' and definition.id or 'cosmetic'
+end
+
+local function buildChoicesForMod(definition, currentMod, modCount)
+    local choices = {}
+    local priceKey = getPriceKey(definition)
+
+    for modIndex = -1, modCount - 1 do
+        local label = GetModLabel(session.vehicle, definition.id, modIndex)
+        choices[#choices + 1] = common.createChoice(
+            ('%s:%s'):format(definition.id, modIndex),
+            label,
+            currentMod == modIndex,
+            actions.getPrice(priceKey, modIndex + 2),
+            function(targetVehicle)
+                SetVehicleMod(targetVehicle, definition.id, modIndex, false)
+            end,
+            locale('menus.general.installed', label),
+            modIndex + 2
+        )
+    end
+
+    return choices, priceKey
+end
+
+local function isModDefinitionEnabled(definition, categoryId)
+    if definition.category ~= categoryId then
+        return false
+    end
+
+    if definition.enabled == false then
+        return false
+    end
+
+    if categoryId == 'performance' and definition.id == 18 then
+        return false
+    end
+
+    if categoryId == 'lights' and definition.id == 48 then
+        return false
+    end
+
+    return true
+end
+
 function builders.buildModOptions(categoryId)
     local options = {}
     local vehicle = session.vehicle
 
-    for _, def in ipairs(config.mods) do
-        if def.category ~= categoryId then goto continue end
-        if categoryId == 'performance' and def.id == 18 then goto continue end
-        if categoryId == 'lights' and def.id == 48 then goto continue end
-        if def.enabled == false then goto continue end
+    for _, definition in ipairs(config.mods) do
+        if not isModDefinitionEnabled(definition, categoryId) then goto continue end
 
-        local modCount = GetNumVehicleMods(vehicle, def.id)
+        local modCount = GetNumVehicleMods(vehicle, definition.id)
         if modCount <= 0 then goto continue end
 
-        local currentMod = GetVehicleMod(vehicle, def.id)
-        local priceKey = def.category == 'performance' and def.id or 'cosmetic'
-        local choices = {}
-
-        for modIndex = -1, modCount - 1 do
-            local label = GetModLabel(vehicle, def.id, modIndex)
-            choices[#choices + 1] = common.createChoice(
-                ('%s:%s'):format(def.id, modIndex),
-                label,
-                currentMod == modIndex,
-                actions.getPrice(priceKey, modIndex + 2),
-                function(targetVehicle)
-                    SetVehicleMod(targetVehicle, def.id, modIndex, false)
-                end,
-                locale('menus.general.installed', label),
-                modIndex + 2
-            )
-        end
-
-        options[#options + 1] = {
-            id = ('mod:%s'):format(def.id),
-            label = def.label,
-            icon = def.icon,
-            asset = def.asset,
-            group = def.group,
-            price = actions.getPrice(priceKey, math.max(currentMod + 2, 1)),
-            priceMod = priceKey,
-            choices = choices,
-            disabled = false,
-        }
+        local currentMod = GetVehicleMod(vehicle, definition.id)
+        local choices, priceKey = buildChoicesForMod(definition, currentMod, modCount)
+        options[#options + 1] = common.createOption(
+            ('mod:%s'):format(definition.id),
+            definition.label,
+            definition.icon,
+            definition.asset,
+            definition.group,
+            actions.getPrice(priceKey, math.max(currentMod + 2, 1)),
+            priceKey,
+            choices
+        )
 
         ::continue::
     end
@@ -62,24 +87,14 @@ function builders.buildTurboOption()
     local enabled = IsToggleModOn(vehicle, 18)
     local price = actions.getPrice(18)
 
-    return {
-        id = 'toggle:turbo',
-        label = locale('menus.performance.turbo'),
-        icon = '➤',
-        asset = 'custom_turbo',
-        group = 'Performance',
-        price = price,
-        priceMod = 18,
-        choices = {
-            common.createChoice('turbo:off', locale('menus.general.disabled'), not enabled, price, function(targetVehicle)
-                ToggleVehicleMod(targetVehicle, 18, false)
-            end, locale('menus.performance.toggleState', locale('menus.performance.turbo'), locale('menus.general.disabled')), 1),
-            common.createChoice('turbo:on', locale('menus.general.enabled'), enabled, price, function(targetVehicle)
-                ToggleVehicleMod(targetVehicle, 18, true)
-            end, locale('menus.performance.toggleState', locale('menus.performance.turbo'), locale('menus.general.enabled')), 2)
-        },
-        disabled = false,
-    }
+    return common.createOption('toggle:turbo', locale('menus.performance.turbo'), '➤', 'custom_turbo', 'Performance', price, 18, {
+        common.createChoice('turbo:off', locale('menus.general.disabled'), not enabled, price, function(targetVehicle)
+            ToggleVehicleMod(targetVehicle, 18, false)
+        end, locale('menus.performance.toggleState', locale('menus.performance.turbo'), locale('menus.general.disabled')), 1),
+        common.createChoice('turbo:on', locale('menus.general.enabled'), enabled, price, function(targetVehicle)
+            ToggleVehicleMod(targetVehicle, 18, true)
+        end, locale('menus.performance.toggleState', locale('menus.performance.turbo'), locale('menus.general.enabled')), 2)
+    })
 end
 
 function builders.buildRepairOption()
@@ -87,28 +102,20 @@ function builders.buildRepairOption()
     if bodyHealth >= 1000.0 then return nil end
 
     local price = math.max(0, math.ceil(1000 - bodyHealth))
-    return {
-        id = 'service:repair',
-        label = locale('menus.main.repair'),
-        icon = '✚',
-        asset = 'custom_engine',
-        group = 'Serviços',
-        price = price,
-        action = 'repair',
-        disabled = false,
-        choices = {
-            {
-                id = 'repair:confirm',
-                label = locale('ui.repairNow'),
-                installed = false,
-                duplicate = false,
-                blocked = false,
-                price = price,
-                isAction = true,
-                action = 'repair',
-            }
+    return common.createOption('service:repair', locale('menus.main.repair'), '✚', 'custom_engine', 'Serviços', price, 'repair', {
+        {
+            id = 'repair:confirm',
+            label = locale('ui.repairNow'),
+            installed = false,
+            duplicate = false,
+            blocked = false,
+            price = price,
+            isAction = true,
+            action = 'repair',
         }
-    }
+    }, {
+        action = 'repair',
+    })
 end
 
 return builders

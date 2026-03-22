@@ -100,7 +100,7 @@ function VRS.InstallUpgrade(vehicle, upgradeType, shopId)
     end
 
     local label = VRS.L.upgrade[upgradeType] or upgradeType
-    VRS.PlayAnimation(serviceState.context.animationSet or 'upgrade_install')
+    VRS.PlayServiceAnimation(vehicle, serviceState.context, 'upgrade_install')
 
     local success = lib.progressBar({
         duration = serviceState.context.duration or Config.Upgrades.duration or 15000,

@@ -111,7 +111,8 @@ local function createLiftTargets(shopId, shop)
         local liftShopId = shopId
         local liftIndex = i
         local liftKey = VRS.GetLiftKey and VRS.GetLiftKey(liftShopId, liftIndex) or ('%s_%s'):format(liftShopId, liftIndex)
-        local liftId = ('vrs_lift_%s_%d'):format(liftShopId, liftIndex)
+        local liftId = ('vrs_lift_%s_%s'):format(liftShopId, lift.id or liftIndex)
+        local liftLabel = VRS.GetLiftDisplayName(lift, liftIndex)
         local panelCoords = getLiftPanelCoords(lift)
 
         liftTargets[liftKey] = exports.ox_target:addBoxZone({
@@ -123,7 +124,7 @@ local function createLiftTargets(shopId, shop)
                 {
                     name = liftId .. '_menu',
                     icon = 'fas fa-car-side',
-                    label = 'Serviços do elevador',
+                    label = ('Serviços - %s'):format(liftLabel),
                     distance = 3.0,
                     canInteract = function()
                         return VRS.ResolveLiftReference(liftShopId, liftIndex) ~= nil
@@ -146,7 +147,7 @@ local function createLiftTargets(shopId, shop)
                 {
                     name = liftId .. '_panel',
                     icon = 'fas fa-sliders',
-                    label = 'Painel do Elevador',
+                    label = ('Painel - %s'):format(liftLabel),
                     distance = Config.Lift.controlPanelDistance or 2.5,
                     canInteract = function()
                         return VRS.ResolveLiftReference(liftShopId, liftIndex) ~= nil

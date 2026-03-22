@@ -182,7 +182,7 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
                     })
                 end,
             }
-        }
+        end
 
         options[#options + 1] = {
             title = VRS.L.shop.lift_remove,

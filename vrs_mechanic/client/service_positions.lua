@@ -10,6 +10,14 @@ local function cloneContext(context)
     return copy
 end
 
+local function getServicePositionTolerance(context)
+    if context and context.positionTolerance then
+        return context.positionTolerance
+    end
+
+    return 1.6
+end
+
 local wheelPresets = {
     [0] = { bone = 'wheel_lf', door = 'front_left', fallback = vec3(-1.05, 1.35, 0.0), heading = 90.0, label = 'roda dianteira esquerda' },
     [1] = { bone = 'wheel_rf', door = 'front_right', fallback = vec3(1.05, 1.35, 0.0), heading = -90.0, label = 'roda dianteira direita' },
@@ -162,20 +170,7 @@ function VRS.MovePlayerToServicePosition(vehicle, context)
         return false
     end
 
-    TaskGoStraightToCoord(ped, coords.x, coords.y, coords.z, 1.0, -1, heading or 0.0, 0.1)
-
-    local timeout = GetGameTimer() + 4000
-    while GetGameTimer() < timeout do
-        Wait(100)
-        if #(GetEntityCoords(ped) - coords) <= 1.25 then
-            break
-        end
-    end
-
-    ClearPedTasks(ped)
-    SetEntityHeading(ped, heading or GetEntityHeading(ped))
-
-    if #(GetEntityCoords(ped) - coords) > 2.0 then
+    if #(GetEntityCoords(ped) - coords) > getServicePositionTolerance(context) then
         lib.notify({
             title = 'Serviço',
             description = 'Posicione-se corretamente para iniciar o reparo.',
@@ -184,6 +179,7 @@ function VRS.MovePlayerToServicePosition(vehicle, context)
         return false
     end
 
+    SetEntityHeading(ped, heading or GetEntityHeading(ped))
     return true
 end
 

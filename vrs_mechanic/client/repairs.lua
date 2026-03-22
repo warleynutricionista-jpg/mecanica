@@ -87,7 +87,7 @@ function VRS.DoStreetRepair(vehicle, plate, part)
     end
 
     -- Animação
-    VRS.PlayAnimation(serviceState.context.animationSet or 'repair')
+    VRS.PlayServiceAnimation(vehicle, serviceState.context, 'repair')
 
     local success = lib.progressBar({
         duration = serviceState.context.duration or Config.StreetRepair.duration or 8000,
@@ -291,7 +291,7 @@ function VRS.DoShopRepair(vehicle, plate, part, shopId)
         end
     end
 
-    VRS.PlayAnimation(serviceState.context.animationSet or 'repair')
+    VRS.PlayServiceAnimation(vehicle, serviceState.context, 'repair')
 
     local success = lib.progressBar({
         duration = serviceState.context.duration or Config.ShopRepair.duration or 12000,
@@ -361,7 +361,7 @@ function VRS.DoOilChange(vehicle, plate, shopId)
     local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', 'oil')
     if not serviceState then return end
 
-    VRS.PlayAnimation(serviceState.context.animationSet or 'repair')
+    VRS.PlayServiceAnimation(vehicle, serviceState.context, 'repair')
 
     local success = lib.progressBar({
         duration = serviceState.context.duration or 6000,
@@ -409,7 +409,7 @@ function VRS.DoVehicleCleaning(vehicle, plate, shopId)
     local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', 'cleaning')
     if not serviceState then return end
 
-    VRS.PlayAnimation(serviceState.context.animationSet or 'cleaning')
+    VRS.PlayServiceAnimation(vehicle, serviceState.context, 'cleaning')
 
     local success = lib.progressBar({
         duration = serviceState.context.duration or 9000,

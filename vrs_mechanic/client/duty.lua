@@ -374,7 +374,7 @@ function VRS.RepairTyre(vehicle, tyreIndex, shopId)
     local serviceState = VRS.BeginContextualVehicleService(vehicle, shopId, 'repair', 'tyre', { tyreIndex = tyreIndex })
     if not serviceState then return end
 
-    VRS.PlayAnimation(serviceState.context.animationSet or 'repair_wheel')
+    VRS.PlayServiceAnimation(vehicle, serviceState.context, 'repair_wheel')
 
     local success = lib.progressBar({
         duration = serviceState.context.duration or 8000,

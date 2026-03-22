@@ -217,6 +217,26 @@ function VRS.ResolveLiftReference(shopId, liftIndex)
     }, nil
 end
 
+---@param lift table|nil
+---@param fallbackIndex number|string|nil
+---@return string
+function VRS.GetLiftDisplayName(lift, fallbackIndex)
+    if type(lift) ~= 'table' then
+        return ('Elevador %s'):format(tostring(fallbackIndex or '?'))
+    end
+
+    local liftName = type(lift.liftName) == 'string' and lift.liftName:gsub('^%s+', ''):gsub('%s+$', '') or nil
+    if liftName and liftName ~= '' then
+        return liftName
+    end
+
+    if lift.id and lift.id ~= '' then
+        return tostring(lift.id)
+    end
+
+    return ('Elevador %s'):format(tostring(fallbackIndex or '?'))
+end
+
 --- Log padronizado para o subsistema de elevadores
 ---@param category string
 ---@param message string

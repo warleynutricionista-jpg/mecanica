@@ -2,17 +2,41 @@ local sharedConfig = require 'config.shared'
 
 local persistence = {}
 
-local function trim(value)
+local function normalizePlate(value)
     if type(value) ~= 'string' then
         return nil
     end
 
-    value = value:match('^%s*(.-)%s*$')
-    if not value or value == '' then
+    local normalized = value:upper():gsub('^%s+', ''):gsub('%s+$', ''):gsub('%s+', ' ')
+    if normalized == '' then
         return nil
     end
 
-    return value:sub(1, 15)
+    return normalized:sub(1, 15)
+end
+
+local function getVehicleRecordById(vehicleId)
+    if not vehicleId then
+        return nil
+    end
+
+    return MySQL.single.await('SELECT id, citizenid, mods, plate FROM player_vehicles WHERE id = ? LIMIT 1', { vehicleId })
+end
+
+local function getVehicleIdFromQbxVehicles(plate)
+    if GetResourceState('qbx_vehicles') ~= 'started' then
+        return nil
+    end
+
+    local ok, vehicleId = pcall(function()
+        return exports.qbx_vehicles:GetVehicleIdByPlate(plate)
+    end)
+
+    if not ok then
+        return nil
+    end
+
+    return vehicleId
 end
 
 function persistence.normalizeProps(props)
@@ -21,7 +45,7 @@ function persistence.normalizeProps(props)
     end
 
     local normalized = table.clone(props)
-    normalized.plate = trim(normalized.plate)
+    normalized.plate = normalizePlate(normalized.plate)
     if not normalized.plate then
         return nil, 'invalidPlate'
     end
@@ -29,8 +53,25 @@ function persistence.normalizeProps(props)
     return normalized, nil
 end
 
+function persistence.normalizePlate(plate)
+    return normalizePlate(plate)
+end
+
 function persistence.getVehicleRecordByPlate(plate)
-    return MySQL.single.await('SELECT id, citizenid, mods FROM player_vehicles WHERE plate = ? LIMIT 1', { trim(plate) })
+    local normalizedPlate = normalizePlate(plate)
+    if not normalizedPlate then
+        return nil
+    end
+
+    local vehicleId = getVehicleIdFromQbxVehicles(normalizedPlate)
+    if vehicleId then
+        local record = getVehicleRecordById(vehicleId)
+        if record then
+            return record
+        end
+    end
+
+    return MySQL.single.await('SELECT id, citizenid, mods, plate FROM player_vehicles WHERE plate = ? LIMIT 1', { normalizedPlate })
 end
 
 local function mergeExistingPersistence(existingMods, newProps)
@@ -90,10 +131,24 @@ local function saveDirect(record, props)
     return true
 end
 
+function persistence.resolveVehicleRecord(plate)
+    local normalizedPlate = normalizePlate(plate)
+    if not normalizedPlate then
+        return nil, 'invalidPlate'
+    end
+
+    local record = persistence.getVehicleRecordByPlate(normalizedPlate)
+    return record, nil, normalizedPlate
+end
+
 function persistence.validateSessionVehicle(plate)
-    local record = persistence.getVehicleRecordByPlate(plate)
+    local record, reason = persistence.resolveVehicleRecord(plate)
     if record then
         return true, record
+    end
+
+    if reason then
+        return false, reason
     end
 
     if sharedConfig.allowTemporaryVehicles then
@@ -109,21 +164,21 @@ function persistence.save(vehicleNetId, props)
         return false, reason
     end
 
-    local ok, recordOrReason = persistence.validateSessionVehicle(normalized.plate)
-    if not ok then
-        return false, recordOrReason
-    end
-
-    if recordOrReason then
+    local record = persistence.getVehicleRecordByPlate(normalized.plate)
+    if record then
         local saved = saveWithQbxVehicles(vehicleNetId, normalized)
         if saved == true then
             return true
         end
 
-        return saveDirect(recordOrReason, normalized)
+        return saveDirect(record, normalized)
     end
 
-    return true
+    if sharedConfig.allowTemporaryVehicles then
+        return true
+    end
+
+    return false, 'notPersisted'
 end
 
 return persistence

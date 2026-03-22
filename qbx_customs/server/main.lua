@@ -30,24 +30,24 @@ lib.callback.register('qbx_customs:server:openSession', function(source, payload
         return { ok = false, reason = zoneOrReason }
     end
 
-    local plate = payload.plate
-    local validVehicle, recordOrReason = persistence.validateSessionVehicle(plate)
-    if not validVehicle then
-        return { ok = false, reason = recordOrReason }
+    local record, plateReason, normalizedPlate = persistence.resolveVehicleRecord(payload.plate)
+    if plateReason then
+        return { ok = false, reason = plateReason }
     end
 
     activeSessions[source] = {
         zoneIndex = zoneIndex,
         zoneId = zoneOrReason.id,
-        plate = plate,
+        plate = normalizedPlate,
         vehicleNetId = tonumber(payload.vehicleNetId) or 0,
-        vehicleId = recordOrReason and recordOrReason.id or nil,
+        vehicleId = record and record.id or nil,
     }
 
     return {
         ok = true,
         zoneId = zoneOrReason.id,
-        plate = plate,
+        plate = normalizedPlate,
+        persisted = record ~= nil,
     }
 end)
 

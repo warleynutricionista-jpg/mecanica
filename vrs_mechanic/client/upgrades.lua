@@ -5,7 +5,8 @@
 --- Abre menu de upgrades
 ---@param vehicle number
 ---@param shopId string
-function VRS.OpenUpgradeMenu(vehicle, shopId)
+---@param menuOptions table|nil
+function VRS.OpenUpgradeMenu(vehicle, shopId, menuOptions)
     if not Config.Upgrades.enabled then
         lib.notify({ title = 'Erro', description = 'Upgrades desativados.', type = 'error' })
         return
@@ -32,7 +33,30 @@ function VRS.OpenUpgradeMenu(vehicle, shopId)
         return
     end
 
-    local options = {}
+    menuOptions = menuOptions or {}
+    local parentMenuId = menuOptions.parentMenu or 'vrs_lift_menu'
+    local plate = VRS.GetPlate(vehicle) or 'SEMPLACA'
+    local rootMenuId = ('vrs_upgrades_%s_%s'):format(menuOptions.liftId or shopId, plate)
+    local groupedOptions = {
+        powertrain = {},
+        electronics = {},
+        boost = {},
+        misc = {},
+    }
+
+    local function getUpgradeGroup(upgradeType)
+        local lower = tostring(upgradeType):lower()
+        if lower:find('ecu', 1, true) then
+            return 'electronics'
+        end
+        if lower:find('turbo', 1, true) or lower:find('nitro', 1, true) then
+            return 'boost'
+        end
+        if lower:find('engine', 1, true) or lower:find('trans', 1, true) or lower:find('clutch', 1, true) then
+            return 'powertrain'
+        end
+        return 'misc'
+    end
 
     for _, upgradeType in ipairs(VRS.UpgradeTypes) do
         local label = VRS.L.upgrade[upgradeType] or upgradeType
@@ -54,7 +78,7 @@ function VRS.OpenUpgradeMenu(vehicle, shopId)
             matsText = table.concat(matNames, ', ')
         end
 
-        options[#options + 1] = {
+        groupedOptions[getUpgradeGroup(upgradeType)][#groupedOptions[getUpgradeGroup(upgradeType)] + 1] = {
             title = label,
             description = ('Materiais: %s%s%s'):format(
                 matsText,
@@ -70,15 +94,51 @@ function VRS.OpenUpgradeMenu(vehicle, shopId)
         }
     end
 
+    local rootOptions = {
+        {
+            title = menuOptions.liftName and ('Elevador: %s'):format(menuOptions.liftName) or 'Elevador ativo',
+            description = ('Veículo: %s'):format(plate),
+            icon = 'fas fa-elevator',
+            readOnly = true,
+        },
+    }
+
+    local categories = {
+        { key = 'powertrain', title = 'Powertrain', icon = 'fas fa-engine', description = 'Motor, transmissão e componentes principais.' },
+        { key = 'electronics', title = 'Eletrônica', icon = 'fas fa-microchip', description = 'ECU e ajustes eletrônicos.' },
+        { key = 'boost', title = 'Turbo / nitro', icon = 'fas fa-gauge-high', description = 'Sistemas de pressão e ganho extra.' },
+        { key = 'misc', title = 'Outros upgrades', icon = 'fas fa-bolt', description = 'Itens adicionais e complementares.' },
+    }
+
+    for _, category in ipairs(categories) do
+        local options = groupedOptions[category.key]
+        if options and #options > 0 then
+            local categoryMenuId = ('%s_%s'):format(rootMenuId, category.key)
+            lib.registerContext({
+                id = categoryMenuId,
+                title = category.title,
+                menu = rootMenuId,
+                options = options,
+            })
+
+            rootOptions[#rootOptions + 1] = {
+                title = category.title,
+                description = ('%s (%d opções)'):format(category.description, #options),
+                icon = category.icon,
+                menu = categoryMenuId,
+            }
+        end
+    end
+
     lib.registerContext({
-        id = 'vrs_upgrades',
+        id = rootMenuId,
         title = VRS.L.upgrade.title,
         description = VRS.L.upgrade.subtitle,
-        menu = 'vrs_lift_menu',
-        options = options,
+        menu = parentMenuId,
+        options = rootOptions,
     })
 
-    lib.showContext('vrs_upgrades')
+    lib.showContext(rootMenuId)
 end
 
 --- Instalar upgrade

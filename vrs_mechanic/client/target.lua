@@ -39,6 +39,10 @@ local function canUseLiftPanel(shopId)
     return VRS.CanUseLift(shopId)
 end
 
+local function openLiftMenu(shopId, liftIndex)
+    return VRS.RequireClientFunction('OpenLiftMenu')(shopId, liftIndex)
+end
+
 local function getLiftVehicle(shopId, liftIndex)
     local state = VRS.GetLiftStateSnapshot and VRS.GetLiftStateSnapshot(shopId, liftIndex) or nil
     local netId = state and state.vehicleNetId or nil
@@ -111,7 +115,8 @@ local function createLiftTargets(shopId, shop)
         local liftShopId = shopId
         local liftIndex = i
         local liftKey = VRS.GetLiftKey and VRS.GetLiftKey(liftShopId, liftIndex) or ('%s_%s'):format(liftShopId, liftIndex)
-        local liftId = ('vrs_lift_%s_%d'):format(liftShopId, liftIndex)
+        local liftId = ('vrs_lift_%s_%s'):format(liftShopId, lift.id or liftIndex)
+        local liftLabel = VRS.GetLiftDisplayName(lift, liftIndex)
         local panelCoords = getLiftPanelCoords(lift)
 
         liftTargets[liftKey] = exports.ox_target:addBoxZone({
@@ -123,7 +128,7 @@ local function createLiftTargets(shopId, shop)
                 {
                     name = liftId .. '_menu',
                     icon = 'fas fa-car-side',
-                    label = 'Serviços do elevador',
+                    label = ('Serviços - %s'):format(liftLabel),
                     distance = 3.0,
                     canInteract = function()
                         return VRS.ResolveLiftReference(liftShopId, liftIndex) ~= nil
@@ -131,7 +136,7 @@ local function createLiftTargets(shopId, shop)
                             and getLiftVehicle(liftShopId, liftIndex) == nil
                     end,
                     onSelect = function()
-                        VRS.OpenLiftMenu(liftShopId, liftIndex)
+                        openLiftMenu(liftShopId, liftIndex)
                     end,
                 },
             },
@@ -146,7 +151,7 @@ local function createLiftTargets(shopId, shop)
                 {
                     name = liftId .. '_panel',
                     icon = 'fas fa-sliders',
-                    label = 'Painel do Elevador',
+                    label = ('Painel - %s'):format(liftLabel),
                     distance = Config.Lift.controlPanelDistance or 2.5,
                     canInteract = function()
                         return VRS.ResolveLiftReference(liftShopId, liftIndex) ~= nil
@@ -203,7 +208,7 @@ local function refreshLiftCommandTargets()
                                     return canUseLiftPanel(commandShopId)
                                 end,
                                 onSelect = function()
-                                    VRS.OpenLiftMenu(commandShopId, commandLiftIndex)
+                                    openLiftMenu(commandShopId, commandLiftIndex)
                                 end,
                             },
                         },
@@ -337,7 +342,7 @@ local function createVehicleTargets()
                 local liftRef = getLiftReferenceForVehicle(vehicle)
                 if not liftRef then return end
 
-                VRS.OpenLiftMenu(liftRef.shopId, liftRef.liftIndex)
+                openLiftMenu(liftRef.shopId, liftRef.liftIndex)
             end,
         },
         {

@@ -19,9 +19,22 @@ VRS.OpenLiftAdminMenu = VRS.OpenLiftAdminMenu or function()
     lib.notify({ title = 'Elevador', description = 'Gerenciamento de elevadores indisponível no momento.', type = 'error' })
 end
 
+VRS.OpenLiftMenu = VRS.OpenLiftMenu or function()
+    error('[vrs_mechanic] OpenLiftMenu não foi inicializada. Verifique a ordem dos client_scripts no fxmanifest.', 2)
+end
+
 VRS.ApplyLiftLayouts = VRS.ApplyLiftLayouts or function() end
 VRS.RebuildLiftTargets = VRS.RebuildLiftTargets or function() end
 VRS.FetchLiftAdminData = VRS.FetchLiftAdminData or function() return nil end
+
+function VRS.RequireClientFunction(name)
+    local fn = VRS[name]
+    if type(fn) ~= 'function' then
+        error(('[vrs_mechanic] Função client %s indisponível. Verifique carregamento/escopo do módulo.'):format(tostring(name)), 2)
+    end
+
+    return fn
+end
 
 function VRS.IsValidVehicleEntity(entity)
     return entity and entity ~= 0 and DoesEntityExist(entity) and IsEntityAVehicle(entity)

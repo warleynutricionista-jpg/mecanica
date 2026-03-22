@@ -315,8 +315,8 @@ local function openLiftListMenu(shopId)
     local options = {}
     for _, lift in ipairs(shop.lifts or {}) do
         options[#options + 1] = {
-            title = ('%s (%s)'):format(lift.id, lift.source == 'custom' and 'custom' or 'config'),
-            description = ('XYZ %.2f, %.2f, %.2f | H %.2f'):format(lift.coords.x, lift.coords.y, lift.coords.z, lift.coords.w or 0.0),
+            title = ('%s (%s)'):format(VRS.GetLiftDisplayName(lift), lift.source == 'custom' and 'custom' or 'config'),
+            description = ('ID: %s | XYZ %.2f, %.2f, %.2f | H %.2f'):format(lift.id, lift.coords.x, lift.coords.y, lift.coords.z, lift.coords.w or 0.0),
             icon = 'fas fa-elevator',
             onSelect = function()
                 VRS.OpenLiftAdminMenu(shopId, lift.id)
@@ -356,6 +356,8 @@ local function saveLiftLayout(payload)
             cooldown = 'Aguarde um instante antes de tentar novamente.',
             outside_shop = 'A nova posição está fora da área permitida da oficina.',
             lift_overlap = 'A nova posição está muito próxima de outro elevador.',
+            invalid_lift_name = 'Defina um nome válido para o elevador.',
+            duplicate_lift_name = 'Já existe outro elevador com este nome nesta oficina.',
         }
         lib.notify({ title = 'Elevador', description = messages[result and result.reason or ''] or 'Falha ao salvar elevador.', type = 'error' })
         return false
@@ -399,6 +401,23 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
     local shop = Config.Shops[shopId]
     if not shop then return end
 
+    local liftIdentity = lib.inputDialog('Identificação do elevador', {
+        {
+            type = 'input',
+            label = 'Nome do elevador',
+            description = 'Nome amigável exibido em menus e no painel.',
+            required = true,
+            min = 3,
+            max = 60,
+            default = existingLift and existingLift.liftName or nil,
+        },
+    })
+
+    if not liftIdentity or not liftIdentity[1] or liftIdentity[1]:gsub('%s+', '') == '' then
+        lib.notify({ title = 'Elevador', description = 'Operação cancelada: nome do elevador é obrigatório.', type = 'inform' })
+        return
+    end
+
     local startCoords
     local startHeading
 
@@ -420,6 +439,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
     editorState = {
         shopId = shopId,
         lift = existingLift,
+        liftName = liftIdentity[1],
         preview = preview,
         requestedModel = requestedModel or (existingLift and existingLift.model) or Config.Lift.DefaultModelName,
         heading = startHeading,
@@ -512,6 +532,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
                     local payload = {
                         shopId = editorState.shopId,
                         liftId = editorState.lift and editorState.lift.id or nil,
+                        liftName = editorState.liftName,
                         model = editorState.lift and editorState.lift.model or editorState.requestedModel or Config.Lift.DefaultModelName,
                         ownerJob = shop.job,
                         category = editorState.shopId,
@@ -551,6 +572,7 @@ local function startLiftEditor(shopId, existingLift, requestedModel)
                 header = {
                     { text = ('~y~EDITOR DE ELEVADOR~s~  |  Oficina: %s'):format(shop.label), color = { 255, 215, 120, 240 }, scale = 0.36 },
                     { text = ('Modelo: %s'):format(editorState.requestedModel or (editorState.lift and editorState.lift.model) or Config.Lift.DefaultModelName), color = { 230, 230, 230, 230 } },
+                    { text = ('Nome: %s'):format(editorState.liftName or 'Sem nome'), color = { 230, 230, 230, 230 } },
                 },
                 controls = {
                     { text = '~b~Mover~s~: WASD ou setas', color = { 160, 220, 255, 235 } },
@@ -613,7 +635,7 @@ local function openShopAdminMenu(shopId)
         },
         {
             title = 'Editar elevador próximo',
-            description = nearestLift and ('Editar %s.'):format(nearestLift.id) or 'Nenhum elevador próximo encontrado.',
+            description = nearestLift and ('Editar %s.'):format(VRS.GetLiftDisplayName(nearestLift)) or 'Nenhum elevador próximo encontrado.',
             icon = 'fas fa-pen',
             disabled = nearestLift == nil,
             onSelect = function()
@@ -624,14 +646,14 @@ local function openShopAdminMenu(shopId)
         },
         {
             title = 'Remover elevador próximo',
-            description = nearestLift and ('Remover %s.'):format(nearestLift.id) or 'Nenhum elevador próximo encontrado.',
+            description = nearestLift and ('Remover %s.'):format(VRS.GetLiftDisplayName(nearestLift)) or 'Nenhum elevador próximo encontrado.',
             icon = 'fas fa-trash',
             disabled = nearestLift == nil,
             onSelect = function()
                 if not nearestLift then return end
                 local confirmed = lib.alertDialog({
                     header = 'Remover elevador',
-                    content = ('Deseja remover o elevador %s?'):format(nearestLift.id),
+                    content = ('Deseja remover o elevador %s?'):format(VRS.GetLiftDisplayName(nearestLift)),
                     centered = true,
                     cancel = true,
                 })
@@ -703,7 +725,7 @@ function VRS.OpenLiftAdminMenu(shopId, liftId)
 
         lib.registerContext({
             id = 'vrs_lift_admin_target_actions',
-            title = ('Gerenciar %s'):format(lift.id),
+            title = ('Gerenciar %s'):format(VRS.GetLiftDisplayName(lift)),
             options = {
                 {
                     title = 'Reposicionar elevador',
@@ -720,7 +742,7 @@ function VRS.OpenLiftAdminMenu(shopId, liftId)
                     onSelect = function()
                         local confirmed = lib.alertDialog({
                             header = 'Remover elevador',
-                            content = ('Deseja remover o elevador %s?'):format(lift.id),
+                            content = ('Deseja remover o elevador %s?'):format(VRS.GetLiftDisplayName(lift)),
                             centered = true,
                             cancel = true,
                         })

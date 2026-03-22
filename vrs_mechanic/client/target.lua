@@ -39,6 +39,10 @@ local function canUseLiftPanel(shopId)
     return VRS.CanUseLift(shopId)
 end
 
+local function openLiftMenu(shopId, liftIndex)
+    return VRS.RequireClientFunction('OpenLiftMenu')(shopId, liftIndex)
+end
+
 local function getLiftVehicle(shopId, liftIndex)
     local state = VRS.GetLiftStateSnapshot and VRS.GetLiftStateSnapshot(shopId, liftIndex) or nil
     local netId = state and state.vehicleNetId or nil
@@ -132,7 +136,7 @@ local function createLiftTargets(shopId, shop)
                             and getLiftVehicle(liftShopId, liftIndex) == nil
                     end,
                     onSelect = function()
-                        VRS.OpenLiftMenu(liftShopId, liftIndex)
+                        openLiftMenu(liftShopId, liftIndex)
                     end,
                 },
             },
@@ -204,7 +208,7 @@ local function refreshLiftCommandTargets()
                                     return canUseLiftPanel(commandShopId)
                                 end,
                                 onSelect = function()
-                                    VRS.OpenLiftMenu(commandShopId, commandLiftIndex)
+                                    openLiftMenu(commandShopId, commandLiftIndex)
                                 end,
                             },
                         },
@@ -338,7 +342,7 @@ local function createVehicleTargets()
                 local liftRef = getLiftReferenceForVehicle(vehicle)
                 if not liftRef then return end
 
-                VRS.OpenLiftMenu(liftRef.shopId, liftRef.liftIndex)
+                openLiftMenu(liftRef.shopId, liftRef.liftIndex)
             end,
         },
         {

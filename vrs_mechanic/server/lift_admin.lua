@@ -66,9 +66,26 @@ local function getSerializedCoords(coords, heading)
     }
 end
 
+local function normalizeLiftName(value)
+    if type(value) ~= 'string' then return nil end
+
+    local trimmed = value:gsub('^%s+', ''):gsub('%s+$', '')
+    if trimmed == '' then
+        return nil
+    end
+
+    return trimmed
+end
+
+local function getDefaultLiftName(shopId, numericId)
+    local suffix = tonumber(numericId) or numericId or 1
+    return ('Elevador %s'):format(tostring(suffix))
+end
+
 local function getLiftRecordForSync(lift)
     return {
         id = lift.id,
+        liftName = lift.liftName,
         model = lift.model,
         ownerJob = lift.ownerJob,
         shopId = lift.shopId,
@@ -191,6 +208,24 @@ local function validateSerializedCoords(coords)
         and tonumber(coords.z) ~= nil
 end
 
+local function isDuplicateLiftName(shopId, liftName, ignoredLiftId)
+    local normalizedName = normalizeLiftName(liftName)
+    if not normalizedName then
+        return false
+    end
+
+    for _, lift in ipairs(Config.Shops[shopId] and Config.Shops[shopId].lifts or {}) do
+        if lift.id ~= ignoredLiftId then
+            local existingName = normalizeLiftName(lift.liftName)
+            if existingName and existingName:lower() == normalizedName:lower() then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 local function validateLiftPlacementData(shopId, liftId, coords)
     local shop = Config.Shops[shopId]
     if not shop or not shop.zones or not shop.zones.main then
@@ -294,6 +329,7 @@ local function normalizeSavedRecord(record)
     record.category = record.category or record.shopId
     record.metadata = type(record.metadata) == 'table' and record.metadata or {}
     record.ownerJob = record.ownerJob or (Config.Shops[record.shopId] and Config.Shops[record.shopId].job) or nil
+    record.liftName = normalizeLiftName(record.liftName) or getDefaultLiftName(record.shopId, record.id and record.id:match('(%d+)$'))
     record.minHeight = tonumber(record.minHeight)
     record.maxHeight = tonumber(record.maxHeight)
     if record.controlPanel then
@@ -301,6 +337,18 @@ local function normalizeSavedRecord(record)
     end
 
     return record
+end
+
+local function isNearLift(existingLifts, coords, tolerance)
+    local placement = vec3(coords.x + 0.0, coords.y + 0.0, coords.z + 0.0)
+    for _, lift in ipairs(existingLifts) do
+        local other = vec3(lift.coords.x, lift.coords.y, lift.coords.z)
+        if #(placement - other) <= (tolerance or (Config.Lift.WorldDetection and Config.Lift.WorldDetection.dedupeDistance) or 1.5) then
+            return true, lift
+        end
+    end
+
+    return false, nil
 end
 
 local function rebuildLiftLayouts()
@@ -313,6 +361,7 @@ local function rebuildLiftLayouts()
         for staticIndex, baseLift in ipairs(staticLifts) do
             local merged = deepCopy(baseLift)
             merged.id = ('%s_static_%d'):format(shopId, staticIndex)
+            merged.liftName = normalizeLiftName(merged.liftName) or getDefaultLiftName(shopId, staticIndex)
             merged.shopId = shopId
             merged.staticIndex = staticIndex
             merged.source = 'static'
@@ -337,6 +386,7 @@ local function rebuildLiftLayouts()
                     merged.length = override.length or merged.length
                     merged.width = override.width or merged.width
                     merged.controlPanel = override.controlPanel or merged.controlPanel
+                    merged.liftName = normalizeLiftName(override.liftName) or merged.liftName
                     merged.model = override.model or merged.model
                     merged.ownerJob = override.ownerJob or merged.ownerJob
                     merged.category = override.category or merged.category
@@ -373,6 +423,7 @@ local function rebuildLiftLayouts()
                     merged.length = override.length or merged.length
                     merged.width = override.width or merged.width
                     merged.controlPanel = override.controlPanel or merged.controlPanel
+                    merged.liftName = normalizeLiftName(override.liftName) or merged.liftName
                     merged.model = override.model or merged.model
                     merged.ownerJob = override.ownerJob or merged.ownerJob
                     merged.category = override.category or merged.category
@@ -389,9 +440,11 @@ local function rebuildLiftLayouts()
                 end
             end
 
-            if merged then
+            local duplicateWorldLift = merged and isNearLift(rebuilt, merged.coords) or false
+            if merged and not duplicateWorldLift then
                 rebuilt[#rebuilt + 1] = {
                     id = merged.id,
+                    liftName = merged.liftName,
                     model = merged.model,
                     ownerJob = merged.ownerJob,
                     shopId = merged.shopId,
@@ -428,6 +481,7 @@ local function rebuildLiftLayouts()
         for _, record in ipairs(customLifts) do
             rebuilt[#rebuilt + 1] = {
                 id = record.id,
+                liftName = record.liftName,
                 model = record.model,
                 ownerJob = record.ownerJob,
                 shopId = record.shopId,
@@ -616,6 +670,13 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
     local shop = Config.Shops[shopId]
     local heading = tonumber(payload.heading or coords.w) or 0.0
     local serializedCoords = getSerializedCoords(coords, heading)
+    local liftName = normalizeLiftName(payload.liftName)
+    if not liftName then
+        return { success = false, reason = 'invalid_lift_name' }
+    end
+    if isDuplicateLiftName(shopId, liftName, payload.liftId) then
+        return { success = false, reason = 'duplicate_lift_name' }
+    end
     liftAdminLog('save', ('Persistindo elevador. source=%s shop=%s lift=%s edit=%s'):format(source, shopId, tostring(payload.liftId), tostring(isEdit)))
 
     if isEdit then
@@ -634,6 +695,7 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
         }
 
         record.shopId = shopId
+        record.liftName = liftName
         record.coords = serializedCoords
         record.heading = heading
         record.length = tonumber(payload.length or existing.length) or existing.length or 5.0
@@ -657,6 +719,7 @@ lib.callback.register('vrs_mechanic:server:saveLiftLayout', function(source, pay
         savedLayouts.lifts[id] = {
             id = id,
             shopId = shopId,
+            liftName = liftName,
             source = 'custom',
             coords = serializedCoords,
             heading = heading,
@@ -752,6 +815,7 @@ RegisterNetEvent('vrs_mechanic:server:registerWorldLifts', function(shopId, lift
             discoveredWorldLifts[shopId][#discoveredWorldLifts[shopId] + 1] = {
                 id = id,
                 shopId = shopId,
+                liftName = normalizeLiftName(lift.liftName) or getDefaultLiftName(shopId, id:match('(%d+)$')),
                 source = 'world',
                 model = lift.model,
                 coords = getSerializedCoords(lift.coords, lift.coords.w),

@@ -126,6 +126,8 @@ local function buildLiftState(shopId, liftIndex)
     local state = VRS.LiftStates[key] or {
         shopId = shopId,
         liftIndex = liftIndex,
+        liftId = (getLiftEntry(shopId, liftIndex) or {}).id,
+        liftName = (getLiftEntry(shopId, liftIndex) or {}).liftName,
         height = metrics.minHeight,
         minHeight = metrics.minHeight,
         maxHeight = metrics.maxHeight,
@@ -133,8 +135,12 @@ local function buildLiftState(shopId, liftIndex)
         plate = nil,
         moving = false,
         direction = nil,
+        vehicleAttachment = nil,
     }
 
+    local lift = getLiftEntry(shopId, liftIndex) or {}
+    state.liftId = lift.id
+    state.liftName = lift.liftName
     state.minHeight = metrics.minHeight
     state.maxHeight = metrics.maxHeight
     state.height = clampHeight(state.height, shopId, liftIndex) or state.minHeight
@@ -148,6 +154,7 @@ local function buildLiftState(shopId, liftIndex)
             state.height = state.minHeight
             state.moving = false
             state.direction = nil
+            state.vehicleAttachment = nil
             clearLiftOperationState(state)
         end
     end
@@ -257,6 +264,12 @@ lib.callback.register('vrs_mechanic:server:placeVehicleOnLift', function(source,
     state.maxHeight = metrics.maxHeight
     state.moving = false
     state.direction = nil
+    state.vehicleAttachment = {
+        forwardOffset = placement and placement.forwardOffset or 0.0,
+        lateralOffset = placement and placement.lateralOffset or 0.0,
+        verticalOffset = metrics.vehicleOffset and metrics.vehicleOffset.z or (Config.Lift.VehicleZOffset or 0.36),
+        headingOffset = placement and placement.headingOffset or 0.0,
+    }
     clearLiftOperationState(state)
     VRS.LiftStates[key] = state
 
@@ -307,6 +320,7 @@ lib.callback.register('vrs_mechanic:server:removeVehicleFromLift', function(sour
         plate = nil,
         moving = false,
         direction = nil,
+        vehicleAttachment = nil,
     }
     clearLiftOperationState(VRS.LiftStates[key])
 

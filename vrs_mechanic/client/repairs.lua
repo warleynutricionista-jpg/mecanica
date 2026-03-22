@@ -149,7 +149,8 @@ end
 --- Menu de reparo de oficina
 ---@param vehicle number
 ---@param shopId string
-function VRS.OpenShopRepairMenu(vehicle, shopId)
+---@param menuOptions table|nil
+function VRS.OpenShopRepairMenu(vehicle, shopId, menuOptions)
     if not vehicle or not DoesEntityExist(vehicle) then
         lib.notify({ title = 'Erro', description = VRS.L.repair.no_vehicle, type = 'error' })
         return
@@ -177,7 +178,22 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
     if not status then return end
 
     local prices = lib.callback.await('vrs_mechanic:server:getShopPrices', false, shopId)
-    local options = {}
+    menuOptions = menuOptions or {}
+    local parentMenuId = menuOptions.parentMenu or 'vrs_lift_menu'
+    local rootMenuId = ('vrs_shop_repair_%s_%s'):format(menuOptions.liftId or shopId, plate)
+    local groupedOptions = {
+        quick = {},
+        engine = {},
+        wheel = {},
+        underbody = {},
+        body = {},
+        finish = {},
+    }
+
+    local function pushGroup(groupKey, option)
+        groupedOptions[groupKey] = groupedOptions[groupKey] or {}
+        groupedOptions[groupKey][#groupedOptions[groupKey] + 1] = option
+    end
 
     for _, part in ipairs(VRS.Parts) do
         local value = status[part] or 0
@@ -187,13 +203,14 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
         local price = prices[part] or 0
 
         if pct >= 100 then
-            options[#options + 1] = {
+            local option = {
                 title = label,
                 description = VRS.L.repair.already_full:format(label),
                 icon = 'fas fa-check-circle',
                 iconColor = '#4CAF50',
                 disabled = true,
             }
+            pushGroup('finish', option)
         else
             -- Verificar materiais
             local hasMats = lib.callback.await('vrs_mechanic:server:checkMaterials', false, part, false)
@@ -215,7 +232,7 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
             local color = VRS.GetStatusColor(pct)
             local iconColor = color == 'green' and '#4CAF50' or (color == 'yellow' and '#FF9800' or '#F44336')
 
-            options[#options + 1] = {
+            local option = {
                 title = ('%s (%d%%)'):format(label, pct),
                 description = ('Preço: R$ %s | Materiais: %s%s%s'):format(
                     VRS.FormatMoney(price),
@@ -230,13 +247,22 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
                     VRS.DoShopRepair(vehicle, plate, part, shopId)
                 end,
             }
+            local serviceArea = context and context.serviceArea or 'body'
+            local groupKey = serviceArea == 'front' and 'engine'
+                or serviceArea == 'wheel' and 'wheel'
+                or serviceArea == 'underbody' and 'underbody'
+                or 'body'
+            pushGroup(groupKey, option)
+            if pct <= 40 then
+                pushGroup('quick', option)
+            end
         end
     end
 
     -- Troca de óleo separada
     if shop.services and shop.services.oil_change then
         local oilPct = VRS.GetPartPercent('oil', status.oil or 0)
-        options[#options + 1] = {
+        pushGroup('engine', {
             title = 'Troca de Óleo',
             description = ('Nível atual: %d%%'):format(oilPct),
             icon = 'fas fa-oil-can',
@@ -244,12 +270,12 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
             onSelect = function()
                 VRS.DoOilChange(vehicle, plate, shopId)
             end,
-        }
+        })
     end
 
     if shop.services and shop.services.wash then
         local hasCleaningKit = lib.callback.await('vrs_mechanic:server:hasItem', false, 'cleaning_kit', 1)
-        options[#options + 1] = {
+        pushGroup('finish', {
             title = 'Limpeza e acabamento',
             description = ('Kit de limpeza%s'):format(not hasCleaningKit and ' | SEM ITEM' or ''),
             icon = 'fas fa-soap',
@@ -258,18 +284,56 @@ function VRS.OpenShopRepairMenu(vehicle, shopId)
             onSelect = function()
                 VRS.DoVehicleCleaning(vehicle, plate, shopId)
             end,
-        }
+        })
+    end
+
+    local categoryDefinitions = {
+        { key = 'quick', title = 'Ações rápidas', icon = 'fas fa-bolt', description = 'Itens mais urgentes para continuar o serviço.' },
+        { key = 'engine', title = 'Motor / frontal', icon = 'fas fa-engine', description = 'Serviços que atuam na parte frontal e no motor.' },
+        { key = 'wheel', title = 'Rodas / freios', icon = 'fas fa-circle', description = 'Serviços laterais, rodas e componentes de frenagem.' },
+        { key = 'underbody', title = 'Parte inferior', icon = 'fas fa-car-rear', description = 'Componentes acessados por baixo do veículo.' },
+        { key = 'body', title = 'Estrutura geral', icon = 'fas fa-car', description = 'Serviços gerais de carroceria e componentes sem grupo específico.' },
+        { key = 'finish', title = 'Finalização', icon = 'fas fa-sparkles', description = 'Itens concluídos ou acabamento final.' },
+    }
+
+    local rootOptions = {
+        {
+            title = menuOptions.liftName and ('Elevador: %s'):format(menuOptions.liftName) or 'Elevador ativo',
+            description = ('Veículo: %s'):format(plate),
+            icon = 'fas fa-elevator',
+            readOnly = true,
+        },
+    }
+
+    for _, category in ipairs(categoryDefinitions) do
+        local categoryOptions = groupedOptions[category.key] or {}
+        if #categoryOptions > 0 then
+            local categoryMenuId = ('%s_%s'):format(rootMenuId, category.key)
+            lib.registerContext({
+                id = categoryMenuId,
+                title = category.title,
+                menu = rootMenuId,
+                options = categoryOptions,
+            })
+
+            rootOptions[#rootOptions + 1] = {
+                title = category.title,
+                description = ('%s (%d opções)'):format(category.description, #categoryOptions),
+                icon = category.icon,
+                menu = categoryMenuId,
+            }
+        end
     end
 
     lib.registerContext({
-        id = 'vrs_shop_repair',
+        id = rootMenuId,
         title = VRS.L.repair.shop_repair,
         description = VRS.L.repair.shop_repair_desc,
-        menu = 'vrs_lift_menu',
-        options = options,
+        menu = parentMenuId,
+        options = rootOptions,
     })
 
-    lib.showContext('vrs_shop_repair')
+    lib.showContext(rootMenuId)
 end
 
 --- Executar reparo de oficina

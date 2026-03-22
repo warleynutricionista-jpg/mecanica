@@ -74,6 +74,7 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
     liftIndex = resolvedLift.liftIndex
 
     local shop = resolvedLift.shop
+    local lift = resolvedLift.lift
 
     if shop.type == 'owned' then
         if not VRS.IsMechanic() and shop.job then
@@ -101,10 +102,13 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
     local vehicleNetId = state.vehicleNetId
     local vehicle = vehicleNetId and VRS.GetEntityFromNetId(vehicleNetId, true) or 0
 
+    local liftName = VRS.GetLiftDisplayName(lift, liftIndex)
+    local menuId = ('vrs_lift_menu_%s'):format(lift.id or liftKey)
+
     local options = {
         {
-            title = 'Status do Elevador',
-            description = ('Altura atual: %.2fm | %s'):format(state.height or 0.0, VRS.GetLiftHeightLabel(state.height or 0.0, shopId, liftIndex)),
+            title = liftName,
+            description = ('ID: %s | Altura atual: %.2fm | %s'):format(lift.id or liftKey, state.height or 0.0, VRS.GetLiftHeightLabel(state.height or 0.0, shopId, liftIndex)),
             icon = 'fas fa-arrows-up-down',
             readOnly = true,
         },
@@ -113,8 +117,15 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
     if vehicleNetId and vehicle ~= 0 and DoesEntityExist(vehicle) then
         local plate = VRS.GetPlate(vehicle) or state.plate or '---'
         options[#options + 1] = {
-            title = 'Diagnosticar veículo no elevador',
-            description = ('Placa: %s'):format(plate),
+            title = 'Veículo vinculado',
+            description = ('Placa: %s | Elevador isolado: %s'):format(plate, liftName),
+            icon = 'fas fa-car-side',
+            readOnly = true,
+        }
+
+        options[#options + 1] = {
+            title = 'Diagnóstico rápido',
+            description = 'Executar diagnóstico do veículo atualmente vinculado a este elevador.',
             icon = 'fas fa-stethoscope',
             onSelect = function()
                 VRS.FullDiagnostic(vehicle, shopId)
@@ -122,44 +133,56 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
         }
 
         options[#options + 1] = {
-            title = 'Iniciar serviço no elevador',
-            description = 'Abrir painel de reparos e serviços completos.',
+            title = 'Painel do elevador',
+            description = 'Subir, descer, parar e acessar posições rápidas deste elevador.',
+            icon = 'fas fa-sliders',
+            onSelect = function()
+                VRS.OpenLiftPanel(shopId, liftIndex)
+            end,
+        }
+
+        options[#options + 1] = {
+            title = 'Reparos e manutenção',
+            description = 'Abrir serviços de oficina organizados por categoria para este veículo.',
             icon = 'fas fa-tools',
             onSelect = function()
-                VRS.OpenShopRepairMenu(vehicle, shopId)
+                VRS.OpenShopRepairMenu(vehicle, shopId, {
+                    parentMenu = menuId,
+                    liftId = lift.id,
+                    liftName = liftName,
+                })
             end,
         }
 
         if shop.services and shop.services.upgrades then
             options[#options + 1] = {
-                title = VRS.L.shop.upgrades,
-                description = VRS.L.shop.upgrades_desc,
+                title = 'Upgrades por categoria',
+                description = 'Abrir instalação de upgrades somente para o veículo deste elevador.',
                 icon = 'fas fa-bolt',
                 onSelect = function()
-                    VRS.OpenUpgradeMenu(vehicle, shopId)
+                    VRS.OpenUpgradeMenu(vehicle, shopId, {
+                        parentMenu = menuId,
+                        liftId = lift.id,
+                        liftName = liftName,
+                    })
                 end,
             }
         end
 
         if shop.services and shop.services.tyre_change then
             options[#options + 1] = {
-                title = VRS.L.shop.tyre_change,
-                description = VRS.L.shop.tyre_change_desc,
+                title = 'Pneus e rodas',
+                description = 'Troca guiada para rodas do veículo atualmente preso neste elevador.',
                 icon = 'fas fa-circle',
                 onSelect = function()
-                    VRS.OpenTyreMenu(vehicle, shopId)
+                    VRS.OpenTyreMenu(vehicle, shopId, {
+                        parentMenu = menuId,
+                        liftId = lift.id,
+                        liftName = liftName,
+                    })
                 end,
             }
         end
-
-        options[#options + 1] = {
-            title = 'Abrir Painel do Elevador',
-            description = 'Controle visual com subir, descer, parar e posições rápidas.',
-            icon = 'fas fa-sliders',
-            onSelect = function()
-                VRS.OpenLiftPanel(shopId, liftIndex)
-            end,
-        }
 
         options[#options + 1] = {
             title = VRS.L.shop.lift_remove,
@@ -184,12 +207,12 @@ function VRS.OpenLiftMenu(shopId, liftIndex)
     end
 
     lib.registerContext({
-        id = 'vrs_lift_menu',
-        title = VRS.L.shop.title:format(shop.label),
+        id = menuId,
+        title = ('%s - %s'):format(shop.label, liftName),
         options = options,
     })
 
-    lib.showContext('vrs_lift_menu')
+    lib.showContext(menuId)
 end
 
 function VRS.PlaceOnLift(shopId, liftIndex)
@@ -304,20 +327,11 @@ function VRS.RemoveFromLift(shopId, liftIndex, vehicle)
     requestControl(vehicle)
     FreezeEntityPosition(vehicle, false)
 
-    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
-    local lift = resolvedLift and resolvedLift.lift or (Config.Shops[shopId] and Config.Shops[shopId].lifts and Config.Shops[shopId].lifts[liftIndex]) or nil
-    if not lift then
-        lib.notify({ title = 'Elevador', description = 'Não foi possível localizar o elevador para finalizar a remoção.', type = 'error' })
-        return
-    end
-    local exitOffset = Config.Lift.exitOffset or vec3(3.0, 0.0, 0.0)
-    local exitCoords = GetOffsetFromEntityInWorldCoords(vehicle, exitOffset.x, exitOffset.y, exitOffset.z)
-    SetEntityCoords(vehicle, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)
-    SetEntityHeading(vehicle, lift.coords.w or GetEntityHeading(vehicle))
-
     local liftKey = VRS.GetLiftKey(shopId, liftIndex)
+    local resolvedLift = VRS.ResolveLiftReference(shopId, liftIndex)
+    local minHeight = (resolvedLift and resolvedLift.lift and resolvedLift.lift.minHeight) or Config.Lift.MinHeight or 0.0
     if VRS.LiftState then
-        VRS.LiftState[liftKey] = { height = (lift.minHeight or Config.Lift.MinHeight or 0.0), minHeight = (lift.minHeight or Config.Lift.MinHeight or 0.0), vehicleNetId = nil }
+        VRS.LiftState[liftKey] = { height = minHeight, minHeight = minHeight, vehicleNetId = nil }
     end
     VRS.OnLift[liftKey] = nil
 
@@ -329,8 +343,11 @@ function VRS.RemoveFromLift(shopId, liftIndex, vehicle)
     lib.notify({ title = 'Elevador', description = 'Veículo retirado da plataforma com sucesso.', type = 'success' })
 end
 
-function VRS.OpenTyreMenu(vehicle, shopId)
+function VRS.OpenTyreMenu(vehicle, shopId, menuOptions)
     if not vehicle or not DoesEntityExist(vehicle) then return end
+    menuOptions = menuOptions or {}
+    local plate = VRS.GetPlate(vehicle) or 'SEMPLACA'
+    local menuId = ('vrs_tyre_menu_%s_%s'):format(menuOptions.liftId or shopId, plate)
 
     local options = {}
     local tyreNames = {
@@ -355,13 +372,13 @@ function VRS.OpenTyreMenu(vehicle, shopId)
     end
 
     lib.registerContext({
-        id = 'vrs_tyre_menu',
+        id = menuId,
         title = 'Troca de Pneus',
-        menu = 'vrs_lift_menu',
+        menu = menuOptions.parentMenu or 'vrs_lift_menu',
         options = options,
     })
 
-    lib.showContext('vrs_tyre_menu')
+    lib.showContext(menuId)
 end
 
 function VRS.RepairTyre(vehicle, tyreIndex, shopId)
